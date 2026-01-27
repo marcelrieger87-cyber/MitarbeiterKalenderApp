@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using MitarbeiterKalenderApp.Core.Domain;
 using MitarbeiterKalenderApp.Core.Services;
 
+
 namespace MitarbeiterKalenderApp.Wpf.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
