@@ -16,6 +16,5 @@ public sealed class DayCellVm
 {
     public string Line1 { get; init; } = "";
     public string Line2 { get; init; } = "";
-
     public Brush Background { get; init; } = Brushes.White;
 }
