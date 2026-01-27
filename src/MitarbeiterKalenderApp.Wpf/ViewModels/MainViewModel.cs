@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MitarbeiterKalenderApp.Core.Domain;
 using MitarbeiterKalenderApp.Core.Services;
-using MitarbeiterKalenderApp.Wpf.Dialogs;
 
 namespace MitarbeiterKalenderApp.Wpf.ViewModels;
 
@@ -14,14 +13,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly HolidayService _holidays = new();
 
     [ObservableProperty] private string monthTitle = "";
-    [ObservableProperty] private string searchText = "";
-
-    // Speichern/OneDrive Bezug (Eingabefeld)
-    [ObservableProperty] private string storageBasePath =
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-    // Toggle für Feiertag-Markierung
-    [ObservableProperty] private bool showHolidays = true;
+    [ObservableProperty] private string saveBasePath = @"C:\Users\%USERNAME%\OneDrive\Mitarbeiter_Kalender";
 
     public ObservableCollection<Employee> Employees { get; } = new();
     [ObservableProperty] private Employee? selectedEmployee;
@@ -35,27 +27,32 @@ public sealed partial class MainViewModel : ObservableObject
     private int _year;
     private int _month;
 
-    // Farben für Wochenende/Feiertag (hellgrün)
-    private static readonly Brush WeekendBrush = new SolidColorBrush(Color.FromRgb(220, 252, 231)); // light green
-    private static readonly Brush HolidayBrush = new SolidColorBrush(Color.FromRgb(187, 247, 208)); // a bit stronger
-    private static readonly Brush NormalBrush = Brushes.White;
+    private HashSet<DateOnly> _holidaySet = new();
 
     public MainViewModel()
     {
-        var now = DateTime.Now;
-        _year = now.Year;
-        _month = now.Month;
-
-        // Demo-Daten (später aus Datei/DB)
+        // Demo-Mitarbeiter (später: DB)
         Employees.Add(new Employee { Name = "Max Mustermann", ShortCode = "MM" });
         Employees.Add(new Employee { Name = "Lisa Beispiel", ShortCode = "LB" });
         Employees.Add(new Employee { Name = "Tom Kalender", ShortCode = "TK" });
         SelectedEmployee = Employees.FirstOrDefault();
 
-        Customers.Add(new Customer { DisplayName = "Kunde A" });
-        Customers.Add(new Customer { DisplayName = "Kunde B" });
-        Customers.Add(new Customer { DisplayName = "Kunde C" });
+        // Demo-Kunden (später: aus Datei/DB)
+        Customers.Add(new Customer { DisplayName = "Kunde A", CustomerNumber = "1001" });
+        Customers.Add(new Customer { DisplayName = "Kunde B", CustomerNumber = "1002" });
+        Customers.Add(new Customer { DisplayName = "Kunde C", CustomerNumber = "1003" });
         SelectedCustomer = Customers.FirstOrDefault();
+
+        var now = DateTime.Now;
+        _year = now.Year;
+        _month = now.Month;
+
+        RefreshAll();
+    }
+
+    private void RefreshAll()
+    {
+        _holidaySet = _holidays.GetHolidays(_year);
 
         BuildHeaders();
         BuildRows();
@@ -68,9 +65,7 @@ public sealed partial class MainViewModel : ObservableObject
         var d = new DateTime(_year, _month, 1).AddMonths(-1);
         _year = d.Year;
         _month = d.Month;
-        BuildHeaders();
-        BuildRows();
-        UpdateTitle();
+        RefreshAll();
     }
 
     [RelayCommand]
@@ -79,28 +74,21 @@ public sealed partial class MainViewModel : ObservableObject
         var d = new DateTime(_year, _month, 1).AddMonths(1);
         _year = d.Year;
         _month = d.Month;
-        BuildHeaders();
-        BuildRows();
-        UpdateTitle();
-    }
-
-    [RelayCommand]
-    private void ToggleHolidays()
-    {
-        ShowHolidays = !ShowHolidays;
-        BuildRows();
+        RefreshAll();
     }
 
     [RelayCommand]
     private void AddEmployee()
     {
-        var dlg = new AddEmployeeDialog();
-        if (dlg.ShowDialog() != true) return;
-
-        var name = dlg.EmployeeName?.Trim();
+        // Minimal-Input ohne extra Fenster
+        var name = Microsoft.VisualBasic.Interaction.InputBox("Name des Mitarbeiters:", "Mitarbeiter anlegen", "");
+        name = (name ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        Employees.Add(new Employee { Name = name });
+        var code = Microsoft.VisualBasic.Interaction.InputBox("Kürzel (optional):", "Mitarbeiter anlegen", "");
+        code = (code ?? "").Trim();
+
+        Employees.Add(new Employee { Name = name, ShortCode = string.IsNullOrWhiteSpace(code) ? null : code });
         SelectedEmployee = Employees.LastOrDefault();
         BuildRows();
     }
@@ -110,11 +98,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (SelectedEmployee is null) return;
 
-        var res = MessageBox.Show(
-            $"Mitarbeiter '{SelectedEmployee.Name}' wirklich löschen?",
-            "Bestätigen",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
+        var res = MessageBox.Show($"Mitarbeiter '{SelectedEmployee.Name}' löschen?", "Bestätigung",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
         if (res != MessageBoxResult.Yes) return;
 
@@ -136,36 +121,32 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void NewAppointment()
     {
-        // Platzhalter: später echter Termin-Dialog wie Excel
-        MessageBox.Show("Neuer Termin (Dialog kommt als nächstes).", "Info");
+        // Platzhalter: später echter Dialog + Klick in Zelle
+        MessageBox.Show("Neuer Termin: kommt als nächstes (Dialog + Klick in Kalenderzelle).", "Info");
     }
 
     [RelayCommand]
     private void NewSeries()
     {
-        // Platzhalter: später Serie-Dialog wie Excel
-        MessageBox.Show("Serie erstellen (Dialog kommt als nächstes).", "Info");
+        MessageBox.Show("Serie erstellen: kommt als nächstes (wie Excel-Serienformular).", "Info");
+    }
+
+    [RelayCommand]
+    private void NewAbsence()
+    {
+        MessageBox.Show("Abwesenheit: kommt als nächstes (wie Excel).", "Info");
     }
 
     [RelayCommand]
     private void ExportExcel()
     {
-        MessageBox.Show($"Export Excel (kommt als nächstes). Basis: {StorageBasePath}", "Info");
+        MessageBox.Show("Export Excel: kommt als nächstes (ClosedXML).", "Info");
     }
 
     [RelayCommand]
     private void ExportPdf()
     {
-        MessageBox.Show($"Export PDF (kommt als nächstes). Basis: {StorageBasePath}", "Info");
-    }
-
-    [RelayCommand]
-    private void Reload()
-    {
-        // später: Kunden/Mitarbeiter/Termine neu laden
-        BuildHeaders();
-        BuildRows();
-        UpdateTitle();
+        MessageBox.Show("Export PDF: kommt als nächstes (QuestPDF).", "Info");
     }
 
     private void UpdateTitle()
@@ -176,15 +157,24 @@ public sealed partial class MainViewModel : ObservableObject
     private void BuildHeaders()
     {
         DayHeaders.Clear();
+
         var start = new DateTime(_year, _month, 1);
         var end = start.AddMonths(1).AddDays(-1);
 
         for (var dt = start; dt <= end; dt = dt.AddDays(1))
         {
+            var day = DateOnly.FromDateTime(dt);
+            var isWeekend = dt.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isHoliday = _holidaySet.Contains(day);
+
             DayHeaders.Add(new DayHeaderVm
             {
                 Title = dt.ToString("dd.MM"),
-                SubTitle = dt.ToString("ddd")
+                SubTitle = dt.ToString("ddd"),
+                HolidayLabel = isHoliday ? "Feiertag" : "",
+                Background = (isHoliday || isWeekend)
+                    ? new SolidColorBrush(Color.FromRgb(232, 245, 233)) // hellgrün
+                    : Brushes.White
             });
         }
     }
@@ -201,35 +191,25 @@ public sealed partial class MainViewModel : ObservableObject
             var row = new EmployeeRowVm
             {
                 Name = e.Name,
-                Meta = string.IsNullOrWhiteSpace(e.ShortCode) ? "" : e.ShortCode!
+                Meta = string.IsNullOrWhiteSpace(e.ShortCode) ? "" : $"Kürzel: {e.ShortCode}"
             };
 
             for (var dt = start; dt <= end; dt = dt.AddDays(1))
             {
-                var d = DateOnly.FromDateTime(dt);
-
+                var day = DateOnly.FromDateTime(dt);
                 var isWeekend = dt.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-                var isHoliday = ShowHolidays && _holidays.IsHoliday(d, out var holidayName);
+                var isHoliday = _holidaySet.Contains(day);
 
-                var bg = NormalBrush;
-                var l2 = "";
+                // Demo-Inhalt (später: RenderService-Ergebnis je Mitarbeiter)
+                var line2 = isHoliday ? "Feiertag" : (isWeekend ? "Wochenende" : "");
+                var bg = (isHoliday || isWeekend)
+                    ? new SolidColorBrush(Color.FromRgb(232, 245, 233)) // hellgrün
+                    : Brushes.White;
 
-                if (isHoliday)
-                {
-                    bg = HolidayBrush;
-                    l2 = holidayName ?? "Feiertag";
-                }
-                else if (isWeekend)
-                {
-                    bg = WeekendBrush;
-                    l2 = "Wochenende";
-                }
-
-                // Demo: später RenderService-Ergebnis hier rein mappen
                 row.DayCells.Add(new DayCellVm
                 {
                     Line1 = "",
-                    Line2 = l2,
+                    Line2 = line2,
                     Background = bg
                 });
             }
@@ -243,4 +223,6 @@ public sealed class DayHeaderVm
 {
     public string Title { get; init; } = "";
     public string SubTitle { get; init; } = "";
+    public string HolidayLabel { get; init; } = "";
+    public Brush Background { get; init; } = Brushes.White;
 }
