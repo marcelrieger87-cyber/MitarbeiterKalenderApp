@@ -79,20 +79,26 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddEmployee()
-    {
-        // Minimal-Input ohne extra Fenster
-        var name = Microsoft.VisualBasic.Interaction.InputBox("Name des Mitarbeiters:", "Mitarbeiter anlegen", "");
-        name = (name ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(name)) return;
+private void AddEmployee()
+{
+    var dlg1 = new MitarbeiterKalenderApp.Wpf.Views.InputDialog("Name des Mitarbeiters:", "");
+    dlg1.Owner = Application.Current.MainWindow;
+    if (dlg1.ShowDialog() != true) return;
 
-        var code = Microsoft.VisualBasic.Interaction.InputBox("Kürzel (optional):", "Mitarbeiter anlegen", "");
-        code = (code ?? "").Trim();
+    var name = (dlg1.Value ?? "").Trim();
+    if (string.IsNullOrWhiteSpace(name)) return;
 
-        Employees.Add(new Employee { Name = name, ShortCode = string.IsNullOrWhiteSpace(code) ? null : code });
-        SelectedEmployee = Employees.LastOrDefault();
-        BuildRows();
-    }
+    var dlg2 = new MitarbeiterKalenderApp.Wpf.Views.InputDialog("Kürzel (optional):", "");
+    dlg2.Owner = Application.Current.MainWindow;
+    if (dlg2.ShowDialog() != true) return;
+
+    var code = (dlg2.Value ?? "").Trim();
+
+    Employees.Add(new Employee { Name = name, ShortCode = string.IsNullOrWhiteSpace(code) ? null : code });
+    SelectedEmployee = Employees.LastOrDefault();
+    BuildRows();
+}
+
 
     [RelayCommand]
     private void DeleteEmployee()
