@@ -3,26 +3,71 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+
+        <!-- Farben (kein Grau-Design) -->
+        <Color x:Key="AppBgColor">#FFFFFF</Color>
+        <Color x:Key="BarBgColor">#FFFFFF</Color>
+        <Color x:Key="BorderColor">#E5E7EB</Color>
+
+        <Color x:Key="PrimaryColor">#2563EB</Color>
+        <Color x:Key="PrimaryHoverColor">#1D4ED8</Color>
+
+        <Color x:Key="TileColor">#F8FAFC</Color>
+        <Color x:Key="TileHoverColor">#EEF2FF</Color>
+
+        <SolidColorBrush x:Key="AppBg" Color="{StaticResource AppBgColor}"/>
+        <SolidColorBrush x:Key="BarBg" Color="{StaticResource BarBgColor}"/>
+        <SolidColorBrush x:Key="BorderBrush1" Color="{StaticResource BorderColor}"/>
+
+        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}"/>
+        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryHoverColor}"/>
+
+        <SolidColorBrush x:Key="TileBrush" Color="{StaticResource TileColor}"/>
+        <SolidColorBrush x:Key="TileHoverBrush" Color="{StaticResource TileHoverColor}"/>
+
+        <!-- Buttons -->
         <Style TargetType="Button">
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Margin" Value="4,0,0,0"/>
-            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#111827"/>
+        </Style>
+
+        <!-- Tile-Buttons -->
+        <Style x:Key="TileButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="MinWidth" Value="170"/>
+            <Setter Property="Background" Value="{StaticResource TileBrush}"/>
+            <Setter Property="Foreground" Value="#111827"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush1}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
         </Style>
 
         <Style TargetType="ComboBox">
-            <Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="MinWidth" Value="170"/>
-            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="MinWidth" Value="220"/>
+            <Setter Property="MinHeight" Value="34"/>
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="MinWidth" Value="220"/>
-            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="MinWidth" Value="260"/>
+            <Setter Property="MinHeight" Value="34"/>
         </Style>
 
         <Style TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+
     </Application.Resources>
 </Application>
