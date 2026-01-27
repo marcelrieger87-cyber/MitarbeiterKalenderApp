@@ -1,38 +1,34 @@
 namespace MitarbeiterKalenderApp.Core.Services;
 
 /// <summary>
-/// Minimaler Feiertags-Service (DE-weit, ohne Bundesland-Sonderfälle).
-/// Markiert Feiertage + liefert Namen.
+/// Einfache Feiertage (DE-weit + bewegliche um Ostern).
+/// Hinweis: Bundesland-spezifische Feiertage sind hier NICHT getrennt.
 /// </summary>
 public sealed class HolidayService
 {
-    public bool IsHoliday(DateOnly date, out string? name)
+    public HashSet<DateOnly> GetHolidays(int year)
     {
-        // Fixe Feiertage (DE-weit)
-        if (date.Month == 1 && date.Day == 1) { name = "Neujahr"; return true; }
-        if (date.Month == 5 && date.Day == 1) { name = "Tag der Arbeit"; return true; }
-        if (date.Month == 10 && date.Day == 3) { name = "Tag der Deutschen Einheit"; return true; }
-        if (date.Month == 12 && date.Day == 25) { name = "1. Weihnachtstag"; return true; }
-        if (date.Month == 12 && date.Day == 26) { name = "2. Weihnachtstag"; return true; }
+        var h = new HashSet<DateOnly>();
 
-        // Bewegliche Feiertage (Ostern-basiert, DE-weit)
-        var easter = EasterSunday(date.Year);
-        var goodFriday = easter.AddDays(-2);
-        var easterMonday = easter.AddDays(1);
-        var ascension = easter.AddDays(39);
-        var whitMonday = easter.AddDays(50);
+        // Fixe Feiertage (bundesweit)
+        h.Add(new DateOnly(year, 1, 1));   // Neujahr
+        h.Add(new DateOnly(year, 5, 1));   // Tag der Arbeit
+        h.Add(new DateOnly(year, 10, 3));  // Tag der Deutschen Einheit
+        h.Add(new DateOnly(year, 12, 25)); // 1. Weihnachtstag
+        h.Add(new DateOnly(year, 12, 26)); // 2. Weihnachtstag
 
-        if (date == goodFriday) { name = "Karfreitag"; return true; }
-        if (date == easterMonday) { name = "Ostermontag"; return true; }
-        if (date == ascension) { name = "Christi Himmelfahrt"; return true; }
-        if (date == whitMonday) { name = "Pfingstmontag"; return true; }
+        // Bewegliche (Ostern)
+        var easter = GetEasterSunday(year);
+        h.Add(easter.AddDays(-2));  // Karfreitag
+        h.Add(easter.AddDays(1));   // Ostermontag
+        h.Add(easter.AddDays(39));  // Christi Himmelfahrt
+        h.Add(easter.AddDays(50));  // Pfingstmontag
 
-        name = null;
-        return false;
+        return h;
     }
 
-    // Gaußsche Osterformel (Gregorianischer Kalender)
-    private static DateOnly EasterSunday(int year)
+    // Gaußsche Osterformel (gregorianisch)
+    private static DateOnly GetEasterSunday(int year)
     {
         int a = year % 19;
         int b = year / 100;
@@ -46,7 +42,7 @@ public sealed class HolidayService
         int k = c % 4;
         int l = (32 + 2 * e + 2 * i - h - k) % 7;
         int m = (a + 11 * h + 22 * l) / 451;
-        int month = (h + l - 7 * m + 114) / 31;   // 3=March, 4=April
+        int month = (h + l - 7 * m + 114) / 31;         // 3=March, 4=April
         int day = ((h + l - 7 * m + 114) % 31) + 1;
 
         return new DateOnly(year, month, day);
