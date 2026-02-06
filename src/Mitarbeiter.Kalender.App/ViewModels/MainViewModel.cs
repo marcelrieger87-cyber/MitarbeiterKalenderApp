@@ -64,7 +64,7 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public string MonthTitle
-        => $"{new DateTime(Year, Month, 1).ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"))}";
+        => new DateTime(Year, Month, 1).ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"));
 
     private MonthView? _monthView;
     public MonthView? MonthView
@@ -139,7 +139,6 @@ public sealed class MainViewModel : ObservableObject
             var mv = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
             MonthView = mv;
 
-            // Keep Employees list in sync with repository
             if (mv.Employees.Count > 0)
             {
                 Employees.Clear();
@@ -285,6 +284,9 @@ public sealed class MainViewModel : ObservableObject
             var daysInMonth = DateTime.DaysInMonth(Year, Month);
             var rand = new Random(42);
 
+            // Kundenliste ohne Risiko von % mit falschem Typ
+            var kunden = new[] { "VW AG", "Kunde Müller", "Kunde Schmidt" };
+
             foreach (var emp in emps)
             {
                 for (int i = 0; i < 6; i++)
@@ -298,12 +300,8 @@ public sealed class MainViewModel : ObservableObject
 
                     var status = (AppointmentStatus)rand.Next(0, 4);
 
-                    var kunde = i % 3 switch
-                    {
-                        0 => "VW AG",
-                        1 => "Kunde Müller",
-                        _ => "Kunde Schmidt"
-                    };
+                    // safe int modulo
+                    var kunde = kunden[i % kunden.Length];
 
                     var appt = new Appointment(
                         Id: Guid.NewGuid().ToString("N"),
