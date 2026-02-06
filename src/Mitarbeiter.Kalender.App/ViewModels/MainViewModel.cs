@@ -75,6 +75,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand TodayCommand { get; }
 
     public RelayCommand AddAppointmentCommand { get; }
+    public RelayCommand CreateSeriesCommand { get; } // (für Button-Binding)
     public RelayCommand DemoCommand { get; }
     public RelayCommand EditCommand { get; }
     public RelayCommand DeleteCommand { get; }
@@ -95,6 +96,11 @@ public sealed class MainViewModel : ObservableObject
         TodayCommand = new RelayCommand(Today);
 
         AddAppointmentCommand = new RelayCommand(() => _ = AddQuickAppointmentAsync());
+
+        // Button existiert im Layout – damit er nicht „tot“ ist:
+        CreateSeriesCommand = new RelayCommand(() =>
+            MessageBox.Show("Serie: kommt als nächster Schritt (VBA-Logik 1:1)."));
+
         DemoCommand = new RelayCommand(() => _ = SeedDemoAsync());
 
         EditCommand = new RelayCommand(() => MessageBox.Show("Termin ändern: als nächster Schritt (Zelle auswählen → Dialog)."));
@@ -163,7 +169,6 @@ public sealed class MainViewModel : ObservableObject
 
     private void Today()
     {
-        // setzt garantiert Jahr/Monat + triggert Refresh über Setter
         Year = DateTime.Today.Year;
         Month = DateTime.Today.Month;
     }
@@ -230,8 +235,6 @@ public sealed class MainViewModel : ObservableObject
         var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
 
         // ===== Excel-Logik (VBA): Start + Dauer (Slots) abfragen =====
-        // VBA nutzt 30-Minuten-Slots und fragt die Dauer über frmTerminZeitfenster (0,5h / 1h / 1,5h / 2h) ab.
-        // Hier zunächst „easy“ über Eingaben – Dialog kommt als nächster Schritt.
         var defaultDate = DateTime.Today.Year == Year && DateTime.Today.Month == Month
             ? new DateOnly(Year, Month, DateTime.Today.Day)
             : new DateOnly(Year, Month, 1);
@@ -285,7 +288,6 @@ public sealed class MainViewModel : ObservableObject
         time = default;
         var t = (input ?? "").Trim();
 
-        // akzeptiert: HH:mm, H:mm, HHmm
         if (TimeOnly.TryParseExact(t, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
             return true;
 
@@ -307,7 +309,8 @@ public sealed class MainViewModel : ObservableObject
         return false;
     }
 
-    private async Task AddQuickAbsenceAsync()()
+    // ✅ FIX: nur EIN Paar Klammern
+    private async Task AddQuickAbsenceAsync()
     {
         var emps = (await _repo.GetEmployeesAsync()).ToList();
         if (emps.Count == 0)
