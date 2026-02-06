@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
-using Microsoft.VisualBasic;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Mitarbeiter.Kalender.App.Controls;
 using Mitarbeiter.Kalender.App.Core.Abstractions;
 using Mitarbeiter.Kalender.App.Core.Models;
 using Mitarbeiter.Kalender.App.Domain.Entities;
@@ -74,17 +76,38 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand NextMonthCommand { get; }
     public RelayCommand TodayCommand { get; }
 
+    // VBA/Excel-Buttons
     public RelayCommand AddAppointmentCommand { get; }
     public RelayCommand CreateSeriesCommand { get; }
-    public RelayCommand DemoCommand { get; }
     public RelayCommand EditCommand { get; }
     public RelayCommand DeleteCommand { get; }
+
     public RelayCommand SyncCommand { get; }
     public RelayCommand AddAbsenceCommand { get; }
     public RelayCommand StatusCommand { get; }
     public RelayCommand AddEmployeeCommand { get; }
     public RelayCommand RemoveEmployeeCommand { get; }
     public RelayCommand SortEmployeesCommand { get; }
+
+    // Klick in Kalenderzelle
+    public RelayCommand<CalendarCellRef> CalendarCellClickCommand { get; }
+
+    private enum Mode
+    {
+        None,
+        Distribute,
+        Delete,
+        EditMove_SelectSource,
+        EditMove_SelectTarget,
+        EditDuration_SelectSource,
+        Series_SelectSource
+    }
+
+    private Mode _mode = Mode.None;
+    private Appointment? _pending;
+    private int _pendingSlots;
+
+    private const int SlotMinutes = 30;
 
     public MainViewModel(ICalendarRepository repo, ICalendarService service)
     {
@@ -95,25 +118,517 @@ public sealed class MainViewModel : ObservableObject
         NextMonthCommand = new RelayCommand(NextMonth);
         TodayCommand = new RelayCommand(Today);
 
-        AddAppointmentCommand = new RelayCommand(() => _ = AddQuickAppointmentAsync());
+        // Excel-Flow: Button setzt Modus -> Klick im Grid führt Aktion aus
+        AddAppointmentCommand = new RelayCommand(StartDistribute);
+        CreateSeriesCommand = new RelayCommand(StartSeries);
+        EditCommand = new RelayCommand(StartEdit);
+        DeleteCommand = new RelayCommand(StartDelete);
 
-        CreateSeriesCommand = new RelayCommand(() =>
-            MessageBox.Show("Serie: kommt als nächster Schritt (VBA-Logik 1:1)."));
-
-        DemoCommand = new RelayCommand(() => _ = SeedDemoAsync());
-
-        EditCommand = new RelayCommand(() => MessageBox.Show("Termin ändern: als nächster Schritt (Zelle auswählen → Dialog)."));
-        DeleteCommand = new RelayCommand(() => MessageBox.Show("Termin löschen: als nächster Schritt (Zelle auswählen → löschen)."));
-        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: als nächster Schritt (Kundenliste/Abgleich)."));
-        AddAbsenceCommand = new RelayCommand(() => _ = AddQuickAbsenceAsync());
-        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: als nächster Schritt."));
+        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt (Datenabgleich)."));
+        AddAbsenceCommand = new RelayCommand(() => MessageBox.Show("Abwesenheit: kommt als nächster Schritt (Excel-Logik 1:1)."));
+        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt (Excel-Logik 1:1)."));
 
         AddEmployeeCommand = new RelayCommand(() => _ = AddEmployeeAsync());
         RemoveEmployeeCommand = new RelayCommand(() => _ = RemoveLastEmployeeAsync());
         SortEmployeesCommand = new RelayCommand(() => _ = SortEmployeesAsync());
 
+        CalendarCellClickCommand = new RelayCommand<CalendarCellRef>(c => _ = OnCellClickAsync(c));
+
         _ = InitializeAsync();
     }
+
+    // ===== Button-Start (VBA-like) =====
+
+    private void StartDistribute()
+    {
+        if (string.IsNullOrWhiteSpace(CustomerFilter))
+        {
+            MessageBox.Show("Bitte zuerst Kundenname oben eintragen.");
+            return;
+        }
+
+        _mode = Mode.Distribute;
+        _pending = null;
+        MessageBox.Show("Termin verteilen: Bitte in die gewünschte Zelle (Tag + Uhrzeit) klicken.\nDanach wählst du nur noch die Dauer.");
+    }
+
+    private void StartDelete()
+    {
+        _mode = Mode.Delete;
+        _pending = null;
+        MessageBox.Show("Termin löschen: Bitte auf einen Termin im Kalender klicken.");
+    }
+
+    private void StartSeries()
+    {
+        _mode = Mode.Series_SelectSource;
+        _pending = null;
+        MessageBox.Show("Serie erstellen: Bitte zuerst auf den QUELL-Termin klicken (Kunde + Startzeit).\nDanach wählst du Intervall & Dauer.");
+    }
+
+    private void StartEdit()
+    {
+        var choice = AskEditMode(); // 1=Zeit, 2=Dauer, 0=Cancel
+        if (choice == 0) return;
+
+        _pending = null;
+        _pendingSlots = 0;
+
+        if (choice == 1)
+        {
+            _mode = Mode.EditMove_SelectSource;
+            MessageBox.Show("Termin ändern (Zeit): Bitte zuerst auf den Termin klicken.\nDanach auf die Ziel-Zelle klicken.");
+        }
+        else
+        {
+            _mode = Mode.EditDuration_SelectSource;
+            MessageBox.Show("Termin ändern (Dauer): Bitte auf den Termin klicken, dann Dauer auswählen.");
+        }
+    }
+
+    // ===== Kalender-Klick =====
+
+    private async Task OnCellClickAsync(CalendarCellRef? cell)
+    {
+        if (cell is null) return;
+        if (MonthView is null) return;
+
+        try
+        {
+            switch (_mode)
+            {
+                case Mode.Distribute:
+                    await HandleDistributeAsync(cell);
+                    break;
+
+                case Mode.Delete:
+                    await HandleDeleteAsync(cell);
+                    break;
+
+                case Mode.EditMove_SelectSource:
+                    await HandleEditMoveSelectSourceAsync(cell);
+                    break;
+
+                case Mode.EditMove_SelectTarget:
+                    await HandleEditMoveSelectTargetAsync(cell);
+                    break;
+
+                case Mode.EditDuration_SelectSource:
+                    await HandleEditDurationAsync(cell);
+                    break;
+
+                case Mode.Series_SelectSource:
+                    await HandleSeriesAsync(cell);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Fehler:\n" + ex.Message);
+        }
+    }
+
+    // ===== Implementierung der 4 Kern-Aktionen =====
+
+    // Termin verteilen: Klick = Datum+Zeit, Dialog = Dauer
+    private async Task HandleDistributeAsync(CalendarCellRef cell)
+    {
+        var existing = FindAppointmentAt(cell);
+        if (existing is not null)
+        {
+            MessageBox.Show("Hier ist bereits ein Termin. (Termin ändern oder löschen verwenden.)");
+            return;
+        }
+
+        var slots = AskDurationSlots();
+        if (slots <= 0) return;
+
+        var start = cell.SlotStart;
+        var end = start.AddMinutes(slots * SlotMinutes);
+
+        var appt = new Appointment(
+            Id: Guid.NewGuid().ToString("N"),
+            EmployeeId: cell.EmployeeId,
+            Date: cell.Date,
+            Start: start,
+            End: end,
+            CustomerName: CustomerFilter.Trim(),
+            Status: AppointmentStatus.Fixed);
+
+        if (HasOverlap(appt, ignoreAppointmentId: null))
+        {
+            MessageBox.Show("Konflikt: Der Termin würde einen anderen Termin überlappen.");
+            return;
+        }
+
+        await _service.UpsertAppointmentAsync(appt);
+        await RefreshAsync();
+    }
+
+    // Termin löschen: Klick = Termin
+    private async Task HandleDeleteAsync(CalendarCellRef cell)
+    {
+        var existing = FindAppointmentAt(cell);
+        if (existing is null)
+        {
+            MessageBox.Show("Kein Termin in dieser Zelle.");
+            return;
+        }
+
+        var ok = MessageBox.Show(
+            $"Termin löschen?\n\n{existing.CustomerName} ({existing.Start:HH\\:mm}–{existing.End:HH\\:mm})",
+            "Löschen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (ok != MessageBoxResult.Yes) return;
+
+        await _service.DeleteAppointmentAsync(existing.Id);
+        await RefreshAsync();
+    }
+
+    // Termin ändern (Zeit): Klick 1 = Quelle, Klick 2 = Ziel
+    private async Task HandleEditMoveSelectSourceAsync(CalendarCellRef cell)
+    {
+        var existing = FindAppointmentAt(cell);
+        if (existing is null)
+        {
+            MessageBox.Show("Bitte zuerst auf einen bestehenden Termin klicken.");
+            return;
+        }
+
+        _pending = existing;
+        _pendingSlots = GetSlots(existing);
+        _mode = Mode.EditMove_SelectTarget;
+
+        MessageBox.Show("Jetzt Ziel-Zelle klicken (Tag + Uhrzeit).", "Zeit ändern");
+    }
+
+    private async Task HandleEditMoveSelectTargetAsync(CalendarCellRef target)
+    {
+        if (_pending is null)
+        {
+            _mode = Mode.EditMove_SelectSource;
+            return;
+        }
+
+        var moved = _pending with
+        {
+            Date = target.Date,
+            Start = target.SlotStart,
+            End = target.SlotStart.AddMinutes(_pendingSlots * SlotMinutes),
+            EmployeeId = target.EmployeeId
+        };
+
+        if (HasOverlap(moved, ignoreAppointmentId: moved.Id))
+        {
+            MessageBox.Show("Konflikt: Der verschobene Termin würde einen anderen Termin überlappen.");
+            return;
+        }
+
+        await _service.UpsertAppointmentAsync(moved);
+        _pending = null;
+        _mode = Mode.None;
+        await RefreshAsync();
+    }
+
+    // Termin ändern (Dauer): Klick = Termin, Dialog = Dauer
+    private async Task HandleEditDurationAsync(CalendarCellRef cell)
+    {
+        var existing = FindAppointmentAt(cell);
+        if (existing is null)
+        {
+            MessageBox.Show("Bitte auf einen bestehenden Termin klicken.");
+            return;
+        }
+
+        var slots = AskDurationSlots(defaultSlots: GetSlots(existing));
+        if (slots <= 0) return;
+
+        var updated = existing with
+        {
+            End = existing.Start.AddMinutes(slots * SlotMinutes)
+        };
+
+        if (HasOverlap(updated, ignoreAppointmentId: updated.Id))
+        {
+            MessageBox.Show("Konflikt: Die neue Dauer würde einen anderen Termin überlappen.");
+            return;
+        }
+
+        await _service.UpsertAppointmentAsync(updated);
+        _mode = Mode.None;
+        await RefreshAsync();
+    }
+
+    // Serie erstellen: Klick = Quelltermin, Dialog = Intervall + Dauer, dann erzeugen bis Monatsende
+    private async Task HandleSeriesAsync(CalendarCellRef cell)
+    {
+        var source = FindAppointmentAt(cell);
+        if (source is null)
+        {
+            MessageBox.Show("Serie erstellen: Bitte auf einen bestehenden Termin klicken (Quelltermin).");
+            return;
+        }
+
+        var intervalWeeks = AskSeriesIntervalWeeks();
+        if (intervalWeeks <= 0) return;
+
+        var slots = AskDurationSlots(defaultSlots: GetSlots(source));
+        if (slots <= 0) return;
+
+        var start = source.Start;
+        var end = start.AddMinutes(slots * SlotMinutes);
+        var weekday = cell.Date.DayOfWeek;
+
+        var anchor = cell.Date;
+        var daysInMonth = DateTime.DaysInMonth(Year, Month);
+        var last = new DateOnly(Year, Month, daysInMonth);
+
+        int created = 0;
+
+        for (var d = anchor; d <= last; d = d.AddDays(1))
+        {
+            if (d.DayOfWeek != weekday) continue;
+
+            var deltaDays = (d.ToDateTime(TimeOnly.MinValue) - anchor.ToDateTime(TimeOnly.MinValue)).Days;
+            var deltaWeeks = deltaDays / 7;
+
+            if (deltaWeeks % intervalWeeks != 0) continue;
+
+            var appt = new Appointment(
+                Id: Guid.NewGuid().ToString("N"),
+                EmployeeId: source.EmployeeId,
+                Date: d,
+                Start: start,
+                End: end,
+                CustomerName: source.CustomerName,
+                Status: source.Status);
+
+            if (HasOverlap(appt, ignoreAppointmentId: null))
+                continue;
+
+            await _service.UpsertAppointmentAsync(appt);
+            created++;
+        }
+
+        _mode = Mode.None;
+        await RefreshAsync();
+        MessageBox.Show($"Serie erstellt: {created} Termine im Monat.");
+    }
+
+    // ===== Helper =====
+
+    private Appointment? FindAppointmentAt(CalendarCellRef cell)
+    {
+        var mv = MonthView;
+        if (mv is null) return null;
+
+        var day = mv.Cells.FirstOrDefault(c => c.Date == cell.Date);
+        if (day is null) return null;
+
+        return day.Appointments
+            .Where(a => a.EmployeeId == cell.EmployeeId)
+            .FirstOrDefault(a => a.Start <= cell.SlotStart && a.End > cell.SlotStart);
+    }
+
+    private bool HasOverlap(Appointment candidate, string? ignoreAppointmentId)
+    {
+        var mv = MonthView;
+        if (mv is null) return false;
+
+        var day = mv.Cells.FirstOrDefault(c => c.Date == candidate.Date);
+        if (day is null) return false;
+
+        foreach (var a in day.Appointments.Where(a => a.EmployeeId == candidate.EmployeeId))
+        {
+            if (!string.IsNullOrWhiteSpace(ignoreAppointmentId) && a.Id == ignoreAppointmentId)
+                continue;
+            if (a.End <= candidate.Start || a.Start >= candidate.End) continue;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static int GetSlots(Appointment a)
+    {
+        var mins = (int)(a.End.ToTimeSpan() - a.Start.ToTimeSpan()).TotalMinutes;
+        if (mins <= 0) return 1;
+        return Math.Max(1, (int)Math.Round(mins / (double)SlotMinutes));
+    }
+
+    // ===== Dialoge (keine InputBox) =====
+
+    private static int AskDurationSlots(int defaultSlots = 2)
+    {
+        var win = new Window
+        {
+            Title = "Dauer auswählen",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White,
+            Content = BuildDurationPanel(out var result, defaultSlots)
+        };
+
+        win.Owner = Application.Current?.MainWindow;
+        win.ShowDialog();
+        return result.Value;
+    }
+
+    private static FrameworkElement BuildDurationPanel(out RefInt result, int defaultSlots)
+    {
+        result = new RefInt(0);
+
+        var root = new StackPanel { Margin = new Thickness(16) };
+        root.Children.Add(new TextBlock
+        {
+            Text = "Wie lange?",
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var grid = new UniformGrid { Columns = 2, Rows = 2 };
+        root.Children.Add(grid);
+
+        void Add(string label, int slots)
+        {
+            var btn = new Button
+            {
+                Content = label,
+                Margin = new Thickness(6),
+                MinWidth = 140,
+                MinHeight = 44,
+                FontWeight = slots == defaultSlots ? FontWeights.SemiBold : FontWeights.Normal
+            };
+            btn.Click += (_, __) =>
+            {
+                result.Value = slots;
+                Window.GetWindow(btn)!.DialogResult = true;
+                Window.GetWindow(btn)!.Close();
+            };
+            grid.Children.Add(btn);
+        }
+
+        Add("0,5 h", 1);
+        Add("1,0 h", 2);
+        Add("1,5 h", 3);
+        Add("2,0 h", 4);
+
+        var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
+        cancel.Click += (_, __) =>
+        {
+            result.Value = 0;
+            Window.GetWindow(cancel)!.DialogResult = false;
+            Window.GetWindow(cancel)!.Close();
+        };
+        root.Children.Add(cancel);
+
+        return root;
+    }
+
+    private static int AskEditMode()
+    {
+        int result = 0;
+
+        var win = new Window
+        {
+            Title = "Termin ändern",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White
+        };
+
+        var root = new StackPanel { Margin = new Thickness(16) };
+        root.Children.Add(new TextBlock
+        {
+            Text = "Was möchtest du ändern?",
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+
+        var b1 = new Button { Content = "Zeit", Margin = new Thickness(6), MinWidth = 120, MinHeight = 44 };
+        b1.Click += (_, __) => { result = 1; win.Close(); };
+
+        var b2 = new Button { Content = "Dauer", Margin = new Thickness(6), MinWidth = 120, MinHeight = 44 };
+        b2.Click += (_, __) => { result = 2; win.Close(); };
+
+        row.Children.Add(b1);
+        row.Children.Add(b2);
+        root.Children.Add(row);
+
+        var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
+        cancel.Click += (_, __) => { result = 0; win.Close(); };
+        root.Children.Add(cancel);
+
+        win.Content = root;
+        win.Owner = Application.Current?.MainWindow;
+        win.ShowDialog();
+
+        return result;
+    }
+
+    private static int AskSeriesIntervalWeeks()
+    {
+        int result = 0;
+
+        var win = new Window
+        {
+            Title = "Serie – Intervall",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White
+        };
+
+        var root = new StackPanel { Margin = new Thickness(16) };
+        root.Children.Add(new TextBlock
+        {
+            Text = "Alle wieviel Wochen?",
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var grid = new UniformGrid { Columns = 4, Rows = 1 };
+        root.Children.Add(grid);
+
+        void Add(int w)
+        {
+            var btn = new Button { Content = w.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(6), MinWidth = 60, MinHeight = 44 };
+            btn.Click += (_, __) => { result = w; win.Close(); };
+            grid.Children.Add(btn);
+        }
+
+        Add(1);
+        Add(2);
+        Add(3);
+        Add(4);
+
+        var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
+        cancel.Click += (_, __) => { result = 0; win.Close(); };
+        root.Children.Add(cancel);
+
+        win.Content = root;
+        win.Owner = Application.Current?.MainWindow;
+        win.ShowDialog();
+
+        return result;
+    }
+
+    private sealed class RefInt
+    {
+        public int Value;
+        public RefInt(int v) => Value = v;
+    }
+
+    // ===== Month / Employees =====
 
     private async Task InitializeAsync()
     {
@@ -138,18 +653,11 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task RefreshAsync()
     {
-        try
-        {
-            MonthView = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
+        MonthView = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
 
-            Employees.Clear();
-            foreach (var e in MonthView.Employees)
-                Employees.Add(e);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Refresh Fehler:\n" + ex.Message);
-        }
+        Employees.Clear();
+        foreach (var e in MonthView.Employees)
+            Employees.Add(e);
     }
 
     private void PrevMonth()
@@ -213,177 +721,9 @@ public sealed class MainViewModel : ObservableObject
     private async Task SortEmployeesAsync()
     {
         var emps = (await _repo.GetEmployeesAsync()).ToList();
-        emps = emps
-            .OrderBy(e => e.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
+        emps = emps.OrderBy(e => e.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList();
         await _repo.SaveEmployeesAsync(emps);
         await RefreshAsync();
-    }
-
-    private async Task AddQuickAppointmentAsync()
-    {
-        var emps = (await _repo.GetEmployeesAsync()).ToList();
-        if (emps.Count == 0)
-        {
-            MessageBox.Show("Bitte zuerst einen Mitarbeiter anlegen.");
-            return;
-        }
-
-        var emp = emps.FirstOrDefault(e => e.IsActive) ?? emps[0];
-        var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
-
-        // ===== Excel/VBA: Datum + Startzeit + Dauer(Slots) abfragen =====
-        var defaultDate = DateTime.Today.Year == Year && DateTime.Today.Month == Month
-            ? new DateOnly(Year, Month, DateTime.Today.Day)
-            : new DateOnly(Year, Month, 1);
-
-        // FIX: InputBox ohne named args (C# case-sensitiv)
-        var dateInput = Interaction.InputBox(
-            $"Datum im Monat eingeben (1–{DateTime.DaysInMonth(Year, Month)}):",
-            "Termin – Datum",
-            defaultDate.Day.ToString(CultureInfo.InvariantCulture));
-
-        if (!int.TryParse((dateInput ?? "").Trim(), out var day) ||
-            day < 1 || day > DateTime.DaysInMonth(Year, Month))
-            return;
-
-        var startInput = Interaction.InputBox(
-            "Startzeit (HH:mm):",
-            "Termin – Startzeit",
-            "09:00");
-
-        if (!TryParseTime(startInput, out var start))
-            return;
-
-        var durInput = Interaction.InputBox(
-            "Dauer wählen (Slots wie Excel/VBA): 1=0,5h · 2=1h · 3=1,5h · 4=2h",
-            "Termin – Dauer",
-            "2");
-
-        if (!int.TryParse((durInput ?? "").Trim(), out var slots) || slots < 1 || slots > 4)
-            return;
-
-        var minutes = slots * 30;
-        var end = start.AddMinutes(minutes);
-
-        var date = new DateOnly(Year, Month, day);
-
-        var appt = new Appointment(
-            Id: Guid.NewGuid().ToString("N"),
-            EmployeeId: emp.Id,
-            Date: date,
-            Start: start,
-            End: end,
-            CustomerName: kunde,
-            Status: AppointmentStatus.Fixed
-        );
-
-        await _service.UpsertAppointmentAsync(appt);
-        await RefreshAsync();
-    }
-
-    private static bool TryParseTime(string? input, out TimeOnly time)
-    {
-        time = default;
-        var t = (input ?? "").Trim();
-
-        if (TimeOnly.TryParseExact(t, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
-            return true;
-
-        if (TimeOnly.TryParseExact(t, "H:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
-            return true;
-
-        if (t.Length == 4 && int.TryParse(t, out var hhmm))
-        {
-            var hh = hhmm / 100;
-            var mm = hhmm % 100;
-            if (hh is >= 0 and <= 23 && mm is >= 0 and <= 59)
-            {
-                time = new TimeOnly(hh, mm);
-                return true;
-            }
-        }
-
-        MessageBox.Show("Ungültige Uhrzeit. Bitte im Format HH:mm eingeben (z.B. 09:30).");
-        return false;
-    }
-
-    private async Task AddQuickAbsenceAsync()
-    {
-        var emps = (await _repo.GetEmployeesAsync()).ToList();
-        if (emps.Count == 0)
-        {
-            MessageBox.Show("Bitte zuerst einen Mitarbeiter anlegen.");
-            return;
-        }
-
-        var emp = emps.FirstOrDefault(e => e.IsActive) ?? emps[0];
-        var date = new DateOnly(Year, Month, Math.Min(2, DateTime.DaysInMonth(Year, Month)));
-
-        var ab = new Absence(
-            Id: Guid.NewGuid().ToString("N"),
-            EmployeeId: emp.Id,
-            Date: date,
-            Type: AbsenceType.Vacation,
-            Note: "Urlaub"
-        );
-
-        await _repo.UpsertAbsenceAsync(ab);
-        await RefreshAsync();
-    }
-
-    private async Task SeedDemoAsync()
-    {
-        try
-        {
-            var emps = (await _repo.GetEmployeesAsync()).ToList();
-
-            if (emps.All(e => e.DisplayName != "Marcel"))
-                emps.Add(new Employee(Guid.NewGuid().ToString("N"), "Marcel", true));
-            if (emps.All(e => e.DisplayName != "Heike"))
-                emps.Add(new Employee(Guid.NewGuid().ToString("N"), "Heike", true));
-
-            await _repo.SaveEmployeesAsync(emps);
-
-            var daysInMonth = DateTime.DaysInMonth(Year, Month);
-            var rand = new Random(42);
-            var kunden = new[] { "VW AG", "Kunde Müller", "Kunde Schmidt" };
-
-            foreach (var emp in emps.Where(e => e.IsActive))
-            {
-                for (int i = 0; i < 6; i++)
-                {
-                    var day = 1 + rand.Next(0, Math.Max(1, daysInMonth - 1));
-                    var date = new DateOnly(Year, Month, day);
-
-                    var startHour = 8 + rand.Next(0, 8);
-                    var start = new TimeOnly(startHour, rand.Next(0, 2) == 0 ? 0 : 30);
-                    var end = start.AddMinutes(60);
-
-                    var status = (AppointmentStatus)rand.Next(0, 4);
-                    var kunde = kunden[i % kunden.Length];
-
-                    var appt = new Appointment(
-                        Id: Guid.NewGuid().ToString("N"),
-                        EmployeeId: emp.Id,
-                        Date: date,
-                        Start: start,
-                        End: end,
-                        CustomerName: kunde,
-                        Status: status
-                    );
-
-                    await _service.UpsertAppointmentAsync(appt);
-                }
-            }
-
-            await RefreshAsync();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Demo Fehler:\n" + ex.Message);
-        }
     }
 
     private static int ClampMonth(int m) => m < 1 ? 1 : (m > 12 ? 12 : m);
