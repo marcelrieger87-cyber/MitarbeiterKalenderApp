@@ -19,7 +19,7 @@ public partial class App : Application
         _host = Host.CreateDefaultBuilder()
             .ConfigureServices((_, services) =>
             {
-                services.AddSingleton<ICalendarRepository>(_ => new SqliteCalendarRepository());
+                services.AddSingleton<ICalendarRepository>(_ => new SqliteCalendarRepository(SqlitePaths.GetDefaultDbPath()));
                 services.AddSingleton<ICalendarService, CalendarService>();
 
                 services.AddSingleton<MainViewModel>();
@@ -28,7 +28,7 @@ public partial class App : Application
 
         _host.Start();
 
-        // Inject VM into MainWindow (StartupUri instantiates view; we swap DataContext in event)
+        // StartupUri instantiates window; we set DataContext afterwards
         this.Startup += (_, _) =>
         {
             if (Current.MainWindow is not null)
