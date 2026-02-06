@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Mitarbeiter.Kalender.App.Controls;
+using Mitarbeiter.Kalender.App.Controls; // ✅ WICHTIG: CalendarCellRef kommt aus ScheduleMonthControl.xaml.cs
 using Mitarbeiter.Kalender.App.Core.Abstractions;
 using Mitarbeiter.Kalender.App.Core.Models;
 using Mitarbeiter.Kalender.App.Domain.Entities;
@@ -76,7 +76,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand NextMonthCommand { get; }
     public RelayCommand TodayCommand { get; }
 
-    // VBA/Excel-Buttons
+    // VBA/Excel Buttons
     public RelayCommand AddAppointmentCommand { get; }
     public RelayCommand CreateSeriesCommand { get; }
     public RelayCommand EditCommand { get; }
@@ -89,7 +89,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand RemoveEmployeeCommand { get; }
     public RelayCommand SortEmployeesCommand { get; }
 
-    // Klick in Kalenderzelle
+    // ✅ Klick in Kalenderzelle (kommt aus Controls.ScheduleMonthControl)
     public RelayCommand<CalendarCellRef> CalendarCellClickCommand { get; }
 
     private enum Mode
@@ -163,7 +163,7 @@ public sealed class MainViewModel : ObservableObject
     {
         _mode = Mode.Series_SelectSource;
         _pending = null;
-        MessageBox.Show("Serie erstellen: Bitte zuerst auf den QUELL-Termin klicken (Kunde + Startzeit).\nDanach wählst du Intervall & Dauer.");
+        MessageBox.Show("Serie erstellen: Bitte zuerst auf den QUELL-Termin klicken.\nDanach wählst du Intervall & Dauer.");
     }
 
     private void StartEdit()
@@ -230,7 +230,6 @@ public sealed class MainViewModel : ObservableObject
 
     // ===== Implementierung der 4 Kern-Aktionen =====
 
-    // Termin verteilen: Klick = Datum+Zeit, Dialog = Dauer
     private async Task HandleDistributeAsync(CalendarCellRef cell)
     {
         var existing = FindAppointmentAt(cell);
@@ -265,7 +264,6 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    // Termin löschen: Klick = Termin
     private async Task HandleDeleteAsync(CalendarCellRef cell)
     {
         var existing = FindAppointmentAt(cell);
@@ -287,7 +285,6 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    // Termin ändern (Zeit): Klick 1 = Quelle, Klick 2 = Ziel
     private async Task HandleEditMoveSelectSourceAsync(CalendarCellRef cell)
     {
         var existing = FindAppointmentAt(cell);
@@ -332,7 +329,6 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    // Termin ändern (Dauer): Klick = Termin, Dialog = Dauer
     private async Task HandleEditDurationAsync(CalendarCellRef cell)
     {
         var existing = FindAppointmentAt(cell);
@@ -361,7 +357,6 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    // Serie erstellen: Klick = Quelltermin, Dialog = Intervall + Dauer, dann erzeugen bis Monatsende
     private async Task HandleSeriesAsync(CalendarCellRef cell)
     {
         var source = FindAppointmentAt(cell);
@@ -458,28 +453,20 @@ public sealed class MainViewModel : ObservableObject
         return Math.Max(1, (int)Math.Round(mins / (double)SlotMinutes));
     }
 
-    // ===== Dialoge (keine InputBox) =====
+    // ===== Dialoge (Buttons statt InputBox) =====
 
     private static int AskDurationSlots(int defaultSlots = 2)
     {
+        int result = 0;
+
         var win = new Window
         {
             Title = "Dauer auswählen",
             SizeToContent = SizeToContent.WidthAndHeight,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
-            Background = Brushes.White,
-            Content = BuildDurationPanel(out var result, defaultSlots)
+            Background = Brushes.White
         };
-
-        win.Owner = Application.Current?.MainWindow;
-        win.ShowDialog();
-        return result.Value;
-    }
-
-    private static FrameworkElement BuildDurationPanel(out RefInt result, int defaultSlots)
-    {
-        result = new RefInt(0);
 
         var root = new StackPanel { Margin = new Thickness(16) };
         root.Children.Add(new TextBlock
@@ -503,12 +490,7 @@ public sealed class MainViewModel : ObservableObject
                 MinHeight = 44,
                 FontWeight = slots == defaultSlots ? FontWeights.SemiBold : FontWeights.Normal
             };
-            btn.Click += (_, __) =>
-            {
-                result.Value = slots;
-                Window.GetWindow(btn)!.DialogResult = true;
-                Window.GetWindow(btn)!.Close();
-            };
+            btn.Click += (_, __) => { result = slots; win.Close(); };
             grid.Children.Add(btn);
         }
 
@@ -518,15 +500,14 @@ public sealed class MainViewModel : ObservableObject
         Add("2,0 h", 4);
 
         var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
-        cancel.Click += (_, __) =>
-        {
-            result.Value = 0;
-            Window.GetWindow(cancel)!.DialogResult = false;
-            Window.GetWindow(cancel)!.Close();
-        };
+        cancel.Click += (_, __) => { result = 0; win.Close(); };
         root.Children.Add(cancel);
 
-        return root;
+        win.Content = root;
+        win.Owner = Application.Current?.MainWindow;
+        win.ShowDialog();
+
+        return result;
     }
 
     private static int AskEditMode()
@@ -606,10 +587,7 @@ public sealed class MainViewModel : ObservableObject
             grid.Children.Add(btn);
         }
 
-        Add(1);
-        Add(2);
-        Add(3);
-        Add(4);
+        Add(1); Add(2); Add(3); Add(4);
 
         var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
         cancel.Click += (_, __) => { result = 0; win.Close(); };
@@ -620,12 +598,6 @@ public sealed class MainViewModel : ObservableObject
         win.ShowDialog();
 
         return result;
-    }
-
-    private sealed class RefInt
-    {
-        public int Value;
-        public RefInt(int v) => Value = v;
     }
 
     // ===== Month / Employees =====
