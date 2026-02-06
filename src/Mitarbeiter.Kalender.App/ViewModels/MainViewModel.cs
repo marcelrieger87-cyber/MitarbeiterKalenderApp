@@ -3,10 +3,8 @@ using System.Globalization;
 using System.Windows;
 using Mitarbeiter.Kalender.App.Core.Abstractions;
 using Mitarbeiter.Kalender.App.Core.Models;
-using Mitarbeiter.Kalender.App.Core.Services;
 using Mitarbeiter.Kalender.App.Domain.Entities;
 using Mitarbeiter.Kalender.App.Domain.Enums;
-using Mitarbeiter.Kalender.App.Infrastructure.Sqlite;
 
 namespace Mitarbeiter.Kalender.App.ViewModels;
 
@@ -41,8 +39,12 @@ public sealed class MainViewModel : ObservableObject
         get => _year;
         set
         {
-            if (SetProperty(ref _year, ClampYear(value)))
+            value = ClampYear(value);
+            if (SetProperty(ref _year, value))
+            {
+                Raise(nameof(MonthTitle));
                 _ = RefreshAsync();
+            }
         }
     }
 
@@ -52,8 +54,12 @@ public sealed class MainViewModel : ObservableObject
         get => _month;
         set
         {
-            if (SetProperty(ref _month, ClampMonth(value)))
+            value = ClampMonth(value);
+            if (SetProperty(ref _month, value))
+            {
+                Raise(nameof(MonthTitle));
                 _ = RefreshAsync();
+            }
         }
     }
 
@@ -64,11 +70,7 @@ public sealed class MainViewModel : ObservableObject
     public MonthView? MonthView
     {
         get => _monthView;
-        private set
-        {
-            if (SetProperty(ref _monthView, value))
-                OnPropertyChanged(nameof(MonthTitle));
-        }
+        private set => SetProperty(ref _monthView, value);
     }
 
     // Commands referenced by MainWindow.xaml
@@ -86,27 +88,26 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand AddEmployeeCommand { get; }
     public RelayCommand RemoveEmployeeCommand { get; }
 
-    public MainViewModel()
+    public MainViewModel(ICalendarRepository repo, ICalendarService service)
     {
-        // SQLite backend (local user profile)
-        _repo = new SqliteCalendarRepository(SqlitePaths.GetDefaultDbPath());
-        _service = new CalendarService(_repo);
+        _repo = repo;
+        _service = service;
 
-        PrevMonthCommand = new RelayCommand(_ => PrevMonth());
-        NextMonthCommand = new RelayCommand(_ => NextMonth());
-        TodayCommand = new RelayCommand(_ => Today());
+        PrevMonthCommand = new RelayCommand(PrevMonth);
+        NextMonthCommand = new RelayCommand(NextMonth);
+        TodayCommand = new RelayCommand(Today);
 
-        AddAppointmentCommand = new RelayCommand(_ => _ = AddQuickAppointmentAsync());
-        DemoCommand = new RelayCommand(_ => _ = SeedDemoAsync());
+        AddAppointmentCommand = new RelayCommand(() => _ = AddQuickAppointmentAsync());
+        DemoCommand = new RelayCommand(() => _ = SeedDemoAsync());
 
-        EditCommand = new RelayCommand(_ => MessageBox.Show("Termin ändern: kommt als nächster Schritt (Dialog wie Excel)."));
-        DeleteCommand = new RelayCommand(_ => MessageBox.Show("Termin löschen: kommt als nächster Schritt (Zelle auswählen → löschen)."));
-        SyncCommand = new RelayCommand(_ => MessageBox.Show("SYNC: kommt als nächster Schritt (Kundenliste/Abgleich)."));
-        AddAbsenceCommand = new RelayCommand(_ => _ = AddQuickAbsenceAsync());
-        StatusCommand = new RelayCommand(_ => MessageBox.Show("Status ändern: kommt als nächster Schritt (Fix/Normal/Cancelled/Tentative)."));
+        EditCommand = new RelayCommand(() => MessageBox.Show("Termin ändern: kommt als nächster Schritt (Dialog wie Excel)."));
+        DeleteCommand = new RelayCommand(() => MessageBox.Show("Termin löschen: kommt als nächster Schritt (Zelle auswählen → löschen)."));
+        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt (Kundenliste/Abgleich)."));
+        AddAbsenceCommand = new RelayCommand(() => _ = AddQuickAbsenceAsync());
+        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt (Fix/Normal/Cancelled/Tentative)."));
 
-        AddEmployeeCommand = new RelayCommand(_ => _ = AddEmployeeAsync());
-        RemoveEmployeeCommand = new RelayCommand(_ => _ = RemoveEmployeeAsync());
+        AddEmployeeCommand = new RelayCommand(() => _ = AddEmployeeAsync());
+        RemoveEmployeeCommand = new RelayCommand(() => _ = RemoveEmployeeAsync());
 
         _ = InitializeAsync();
     }
@@ -123,7 +124,6 @@ public sealed class MainViewModel : ObservableObject
                 Employees.Add(e);
 
             SelectedEmployee ??= Employees.FirstOrDefault();
-
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -139,7 +139,7 @@ public sealed class MainViewModel : ObservableObject
             var mv = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
             MonthView = mv;
 
-            // Keep Employees list in sync with repository (in case of seed/add/remove)
+            // Keep Employees list in sync with repository
             if (mv.Employees.Count > 0)
             {
                 Employees.Clear();
@@ -154,7 +154,6 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // If something breaks, you still see the reason
             MessageBox.Show("Refresh Fehler:\n" + ex.Message);
         }
     }
@@ -187,7 +186,6 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        // Simple “Excel-like quick add”: first day, 09:00–10:00
         var date = new DateOnly(Year, Month, 1);
         var start = new TimeOnly(9, 0);
         var end = new TimeOnly(10, 0);
@@ -284,25 +282,21 @@ public sealed class MainViewModel : ObservableObject
                 await _repo.SaveEmployeesAsync(emps);
             }
 
-            // Create a few demo appointments across the month (Excel-like feel)
-            var firstDay = new DateOnly(Year, Month, 1);
             var daysInMonth = DateTime.DaysInMonth(Year, Month);
-
             var rand = new Random(42);
 
             foreach (var emp in emps)
             {
-                // 6 demo appointments per employee
                 for (int i = 0; i < 6; i++)
                 {
                     var day = 1 + rand.Next(0, Math.Max(1, daysInMonth - 1));
                     var date = new DateOnly(Year, Month, day);
 
-                    var startHour = 8 + rand.Next(0, 8); // 08:00..15:00
+                    var startHour = 8 + rand.Next(0, 8);
                     var start = new TimeOnly(startHour, rand.Next(0, 2) == 0 ? 0 : 30);
                     var end = start.AddMinutes(60);
 
-                    var status = (AppointmentStatus)(rand.Next(0, 4));
+                    var status = (AppointmentStatus)rand.Next(0, 4);
 
                     var kunde = i % 3 switch
                     {
@@ -324,8 +318,7 @@ public sealed class MainViewModel : ObservableObject
                     await _service.UpsertAppointmentAsync(appt);
                 }
 
-                // 1 absence
-                var abDate = firstDay.AddDays(Math.Min(10, daysInMonth - 1));
+                var abDate = new DateOnly(Year, Month, Math.Min(10, daysInMonth));
                 var ab = new Absence(Guid.NewGuid().ToString("N"), emp.Id, abDate, AbsenceType.Training, "Schulung");
                 await _repo.UpsertAbsenceAsync(ab);
             }
