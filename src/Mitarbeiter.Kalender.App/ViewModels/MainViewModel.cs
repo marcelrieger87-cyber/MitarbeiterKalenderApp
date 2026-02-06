@@ -15,15 +15,11 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<Employee> Employees { get; } = new();
 
-    private Employee? _selectedEmployee;
-    public Employee? SelectedEmployee
+    private string _newEmployeeName = "";
+    public string NewEmployeeName
     {
-        get => _selectedEmployee;
-        set
-        {
-            if (SetProperty(ref _selectedEmployee, value))
-                _ = RefreshAsync();
-        }
+        get => _newEmployeeName;
+        set => SetProperty(ref _newEmployeeName, value);
     }
 
     private string _customerFilter = "";
@@ -63,8 +59,8 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public string MonthTitle
-        => new DateTime(Year, Month, 1).ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"));
+    public string MonthTitle => new DateTime(Year, Month, 1)
+        .ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"));
 
     private MonthView? _monthView;
     public MonthView? MonthView
@@ -73,7 +69,6 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _monthView, value);
     }
 
-    // Commands referenced by MainWindow.xaml
     public RelayCommand PrevMonthCommand { get; }
     public RelayCommand NextMonthCommand { get; }
     public RelayCommand TodayCommand { get; }
@@ -100,14 +95,14 @@ public sealed class MainViewModel : ObservableObject
         AddAppointmentCommand = new RelayCommand(() => _ = AddQuickAppointmentAsync());
         DemoCommand = new RelayCommand(() => _ = SeedDemoAsync());
 
-        EditCommand = new RelayCommand(() => MessageBox.Show("Termin ändern: kommt als nächster Schritt (Dialog wie Excel)."));
+        EditCommand = new RelayCommand(() => MessageBox.Show("Termin ändern: kommt als nächster Schritt (Zelle auswählen → Dialog)."));
         DeleteCommand = new RelayCommand(() => MessageBox.Show("Termin löschen: kommt als nächster Schritt (Zelle auswählen → löschen)."));
-        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt (Kundenliste/Abgleich)."));
+        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt."));
         AddAbsenceCommand = new RelayCommand(() => _ = AddQuickAbsenceAsync());
-        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt (Fix/Normal/Cancelled/Tentative)."));
+        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt."));
 
         AddEmployeeCommand = new RelayCommand(() => _ = AddEmployeeAsync());
-        RemoveEmployeeCommand = new RelayCommand(() => _ = RemoveEmployeeAsync());
+        RemoveEmployeeCommand = new RelayCommand(() => _ = RemoveLastEmployeeAsync());
 
         _ = InitializeAsync();
     }
@@ -118,12 +113,19 @@ public sealed class MainViewModel : ObservableObject
         {
             await _repo.InitializeAsync();
 
-            var emps = await _repo.GetEmployeesAsync();
+            var emps = (await _repo.GetEmployeesAsync()).ToList();
+
+            // Wenn noch keiner existiert: 1 Default anlegen (damit du sofort testen kannst)
+            if (emps.Count == 0)
+            {
+                emps.Add(new Employee(Guid.NewGuid().ToString("N"), "Marcel", true));
+                await _repo.SaveEmployeesAsync(emps);
+            }
+
             Employees.Clear();
             foreach (var e in emps)
                 Employees.Add(e);
 
-            SelectedEmployee ??= Employees.FirstOrDefault();
             await RefreshAsync();
         }
         catch (Exception ex)
@@ -136,19 +138,14 @@ public sealed class MainViewModel : ObservableObject
     {
         try
         {
-            var mv = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
-            MonthView = mv;
+            MonthView = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
 
-            if (mv.Employees.Count > 0)
+            // Sync Employees from MonthView
+            if (MonthView is not null && MonthView.Employees.Count > 0)
             {
                 Employees.Clear();
-                foreach (var e in mv.Employees)
+                foreach (var e in MonthView.Employees)
                     Employees.Add(e);
-
-                if (SelectedEmployee is null)
-                    SelectedEmployee = Employees.FirstOrDefault();
-                else
-                    SelectedEmployee = Employees.FirstOrDefault(x => x.Id == SelectedEmployee.Id) ?? Employees.FirstOrDefault();
             }
         }
         catch (Exception ex)
@@ -177,23 +174,68 @@ public sealed class MainViewModel : ObservableObject
         Month = DateTime.Today.Month;
     }
 
-    private async Task AddQuickAppointmentAsync()
+    private async Task AddEmployeeAsync()
     {
-        if (SelectedEmployee is null)
+        var name = (NewEmployeeName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
         {
-            MessageBox.Show("Bitte zuerst einen Mitarbeiter auswählen.");
+            MessageBox.Show("Bitte Mitarbeitername eingeben.");
             return;
         }
 
+        var emps = (await _repo.GetEmployeesAsync()).ToList();
+
+        // Doppelname vermeiden (einfach)
+        if (emps.Any(e => string.Equals(e.DisplayName, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show("Mitarbeiter existiert schon.");
+            return;
+        }
+
+        emps.Add(new Employee(Guid.NewGuid().ToString("N"), name, true));
+        await _repo.SaveEmployeesAsync(emps);
+
+        NewEmployeeName = "";
+        await RefreshAsync();
+    }
+
+    private async Task RemoveLastEmployeeAsync()
+    {
+        var emps = (await _repo.GetEmployeesAsync()).ToList();
+        if (emps.Count == 0)
+        {
+            MessageBox.Show("Keine Mitarbeiter vorhanden.");
+            return;
+        }
+
+        // Einfach: letzten löschen (später bauen wir Auswahl + Löschen gezielt)
+        emps.RemoveAt(emps.Count - 1);
+        await _repo.SaveEmployeesAsync(emps);
+        await RefreshAsync();
+    }
+
+    private async Task AddQuickAppointmentAsync()
+    {
+        var emps = (await _repo.GetEmployeesAsync()).ToList();
+        if (emps.Count == 0)
+        {
+            MessageBox.Show("Bitte zuerst einen Mitarbeiter anlegen.");
+            return;
+        }
+
+        // Nimm den ersten aktiven Mitarbeiter (später: Klick in Zelle)
+        var emp = emps.FirstOrDefault(e => e.IsActive) ?? emps[0];
+
+        var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
+
+        // Quick Add: 1. Tag 09:00-10:00
         var date = new DateOnly(Year, Month, 1);
         var start = new TimeOnly(9, 0);
         var end = new TimeOnly(10, 0);
 
-        var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
-
         var appt = new Appointment(
             Id: Guid.NewGuid().ToString("N"),
-            EmployeeId: SelectedEmployee.Id,
+            EmployeeId: emp.Id,
             Date: date,
             Start: start,
             End: end,
@@ -207,17 +249,19 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task AddQuickAbsenceAsync()
     {
-        if (SelectedEmployee is null)
+        var emps = (await _repo.GetEmployeesAsync()).ToList();
+        if (emps.Count == 0)
         {
-            MessageBox.Show("Bitte zuerst einen Mitarbeiter auswählen.");
+            MessageBox.Show("Bitte zuerst einen Mitarbeiter anlegen.");
             return;
         }
 
+        var emp = emps.FirstOrDefault(e => e.IsActive) ?? emps[0];
         var date = new DateOnly(Year, Month, Math.Min(2, DateTime.DaysInMonth(Year, Month)));
 
         var ab = new Absence(
             Id: Guid.NewGuid().ToString("N"),
-            EmployeeId: SelectedEmployee.Id,
+            EmployeeId: emp.Id,
             Date: date,
             Type: AbsenceType.Vacation,
             Note: "Urlaub"
@@ -227,67 +271,25 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    private async Task AddEmployeeAsync()
-    {
-        var existing = await _repo.GetEmployeesAsync();
-        var n = existing.Count + 1;
-
-        var emp = new Employee(
-            Id: Guid.NewGuid().ToString("N"),
-            DisplayName: $"MA {n}",
-            IsActive: true
-        );
-
-        var merged = existing.ToList();
-        merged.Add(emp);
-
-        await _repo.SaveEmployeesAsync(merged);
-        SelectedEmployee = emp;
-        await RefreshAsync();
-    }
-
-    private async Task RemoveEmployeeAsync()
-    {
-        if (SelectedEmployee is null)
-        {
-            MessageBox.Show("Kein Mitarbeiter ausgewählt.");
-            return;
-        }
-
-        var emps = (await _repo.GetEmployeesAsync()).ToList();
-        var target = emps.FirstOrDefault(x => x.Id == SelectedEmployee.Id);
-        if (target is null) return;
-
-        emps.Remove(target);
-        await _repo.SaveEmployeesAsync(emps);
-
-        SelectedEmployee = emps.FirstOrDefault();
-        await RefreshAsync();
-    }
-
     private async Task SeedDemoAsync()
     {
         try
         {
-            var emps = await _repo.GetEmployeesAsync();
-            if (emps.Count == 0)
-            {
-                emps = new List<Employee>
-                {
-                    new(Guid.NewGuid().ToString("N"), "Marcel", true),
-                    new(Guid.NewGuid().ToString("N"), "Heike", true),
-                    new(Guid.NewGuid().ToString("N"), "MA 3", true),
-                };
-                await _repo.SaveEmployeesAsync(emps);
-            }
+            var emps = (await _repo.GetEmployeesAsync()).ToList();
+
+            // Wenn zu wenig da sind, ergänzen wir, damit es „Excel-mäßig“ wirkt
+            if (emps.All(e => e.DisplayName != "Marcel"))
+                emps.Add(new Employee(Guid.NewGuid().ToString("N"), "Marcel", true));
+            if (emps.All(e => e.DisplayName != "Heike"))
+                emps.Add(new Employee(Guid.NewGuid().ToString("N"), "Heike", true));
+
+            await _repo.SaveEmployeesAsync(emps);
 
             var daysInMonth = DateTime.DaysInMonth(Year, Month);
             var rand = new Random(42);
-
-            // Kundenliste ohne Risiko von % mit falschem Typ
             var kunden = new[] { "VW AG", "Kunde Müller", "Kunde Schmidt" };
 
-            foreach (var emp in emps)
+            foreach (var emp in emps.Where(e => e.IsActive))
             {
                 for (int i = 0; i < 6; i++)
                 {
@@ -299,8 +301,6 @@ public sealed class MainViewModel : ObservableObject
                     var end = start.AddMinutes(60);
 
                     var status = (AppointmentStatus)rand.Next(0, 4);
-
-                    // safe int modulo
                     var kunde = kunden[i % kunden.Length];
 
                     var appt = new Appointment(
@@ -315,13 +315,8 @@ public sealed class MainViewModel : ObservableObject
 
                     await _service.UpsertAppointmentAsync(appt);
                 }
-
-                var abDate = new DateOnly(Year, Month, Math.Min(10, daysInMonth));
-                var ab = new Absence(Guid.NewGuid().ToString("N"), emp.Id, abDate, AbsenceType.Training, "Schulung");
-                await _repo.UpsertAbsenceAsync(ab);
             }
 
-            SelectedEmployee ??= emps.FirstOrDefault();
             await RefreshAsync();
         }
         catch (Exception ex)
