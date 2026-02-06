@@ -22,6 +22,9 @@
   <SolidColorBrush x:Key="HeaderBlue" Color="#FF1F6F5B"/>     <!-- Excel-like dark green/teal -->
   <SolidColorBrush x:Key="WeekendGreen" Color="#FF2E7D32"/>   <!-- Weekend header -->
   <SolidColorBrush x:Key="WeekendFill" Color="#FFE8F5E9"/>    <!-- Weekend cells -->
+<SolidColorBrush x:Key="HolidayGreen" Color="#FF2E7D32"/>
+<SolidColorBrush x:Key="HolidayFill" Color="#FFE8F5E9"/>
+
 
   <!-- Status/Absence -->
   <SolidColorBrush x:Key="AbsenceBrush" Color="#FF9C27B0"/>   <!-- purple-ish for ABW chip -->
