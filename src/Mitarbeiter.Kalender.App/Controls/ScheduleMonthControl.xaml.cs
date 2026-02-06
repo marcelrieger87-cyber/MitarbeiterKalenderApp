@@ -5,12 +5,17 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Mitarbeiter.Kalender.App.Core.Models;
 using Mitarbeiter.Kalender.App.Domain.Enums;
-using Mitarbeiter.Kalender.App.ViewModels; // ✅ CalendarCellRef
+using Mitarbeiter.Kalender.App.ViewModels;
 
 namespace Mitarbeiter.Kalender.App.Controls;
 
 public partial class ScheduleMonthControl : UserControl
 {
+    // ✅ Markierung (Excel-like)
+    private string? _selectedEmployeeId;
+    private DateOnly? _selectedDate;
+    private TimeOnly? _selectedSlotStart;
+
     public ScheduleMonthControl()
     {
         InitializeComponent();
@@ -29,7 +34,7 @@ public partial class ScheduleMonthControl : UserControl
         set => SetValue(MonthViewProperty, value);
     }
 
-    // ✅ NEU: Command für Klick in Kalenderzelle
+    // ✅ Command für Klick in Kalenderzelle
     public static readonly DependencyProperty CellClickCommandProperty =
         DependencyProperty.Register(
             nameof(CellClickCommand),
@@ -67,8 +72,7 @@ public partial class ScheduleMonthControl : UserControl
         RootGrid.ColumnDefinitions.Clear();
 
         var mv = MonthView;
-        if (mv is null)
-            return;
+        if (mv is null) return;
 
         var days = GetDaysOfMonth(mv.Year, mv.Month);
         var slots = GetSlots(StartTime, EndTime, SlotMinutes);
@@ -80,7 +84,7 @@ public partial class ScheduleMonthControl : UserControl
 
         int row = 0;
 
-        // Top header row: day headers
+        // Header row
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(HeaderRowHeight) });
 
         AddCell(row, 0, "Zeit", isHeader: true, bg: TryFindBrush("HeaderBlue"), fg: Brushes.White, fontWeight: FontWeights.SemiBold);
@@ -121,39 +125,16 @@ public partial class ScheduleMonthControl : UserControl
                         new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
                         new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
                         new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
-                    },
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = emp.DisplayName,
-                            Foreground = Brushes.White,
-                            FontWeight = FontWeights.SemiBold,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            HorizontalAlignment = HorizontalAlignment.Left
-                        },
-                        new TextBlock
-                        {
-                            Text = emp.DisplayName,
-                            Foreground = Brushes.White,
-                            FontWeight = FontWeights.SemiBold,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            HorizontalAlignment = HorizontalAlignment.Center
-                        },
-                        new TextBlock
-                        {
-                            Text = emp.DisplayName,
-                            Foreground = Brushes.White,
-                            FontWeight = FontWeights.SemiBold,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            HorizontalAlignment = HorizontalAlignment.Right
-                        }
                     }
                 }
             };
-            Grid.SetColumn(((Grid)title.Child).Children[0], 0);
-            Grid.SetColumn(((Grid)title.Child).Children[1], 1);
-            Grid.SetColumn(((Grid)title.Child).Children[2], 2);
+
+            var g = (Grid)title.Child;
+            var t1 = new TextBlock { Text = emp.DisplayName, Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left };
+            var t2 = new TextBlock { Text = emp.DisplayName, Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+            var t3 = new TextBlock { Text = emp.DisplayName, Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
+            Grid.SetColumn(t1, 0); Grid.SetColumn(t2, 1); Grid.SetColumn(t3, 2);
+            g.Children.Add(t1); g.Children.Add(t2); g.Children.Add(t3);
 
             Grid.SetRow(title, row);
             Grid.SetColumn(title, 1);
@@ -187,23 +168,25 @@ public partial class ScheduleMonthControl : UserControl
 
                     var cellItems = FindItemsForSlot(mv, emp.Id, date, slotStart, SlotMinutes);
 
-                    Border clickableCell;
+                    Border cell;
+                    UIElement? content = null;
 
-                    if (cellItems.Count == 0)
-                    {
-                        clickableCell = MakeClickableCell(emp.Id, date, slotStart, cellBg, null);
-                    }
-                    else
+                    if (cellItems.Count > 0)
                     {
                         var first = cellItems[0];
-                        var chip = MakeChip(first.Text, first.StatusBrush);
-
-                        clickableCell = MakeClickableCell(emp.Id, date, slotStart, cellBg, chip);
+                        content = MakeChip(first.Text, first.StatusBrush);
                     }
 
-                    Grid.SetRow(clickableCell, row);
-                    Grid.SetColumn(clickableCell, d + 1);
-                    RootGrid.Children.Add(clickableCell);
+                    var isSelected =
+                        _selectedEmployeeId == emp.Id &&
+                        _selectedDate == date &&
+                        _selectedSlotStart == slotStart;
+
+                    cell = MakeClickableCell(emp.Id, date, slotStart, cellBg, content, isSelected);
+
+                    Grid.SetRow(cell, row);
+                    Grid.SetColumn(cell, d + 1);
+                    RootGrid.Children.Add(cell);
                 }
 
                 row++;
@@ -215,13 +198,13 @@ public partial class ScheduleMonthControl : UserControl
         }
     }
 
-    private Border MakeClickableCell(string employeeId, DateOnly date, TimeOnly slotStart, Brush bg, UIElement? content)
+    private Border MakeClickableCell(string employeeId, DateOnly date, TimeOnly slotStart, Brush bg, UIElement? content, bool isSelected)
     {
         var border = new Border
         {
             Background = bg,
-            BorderBrush = TryFindBrush("GridLine"),
-            BorderThickness = new Thickness(0.5),
+            BorderBrush = isSelected ? TryFindBrush("HeaderBlue") : TryFindBrush("GridLine"),
+            BorderThickness = isSelected ? new Thickness(2) : new Thickness(0.5),
             Padding = new Thickness(2, 1, 2, 1),
             Child = content
         };
@@ -229,6 +212,15 @@ public partial class ScheduleMonthControl : UserControl
         border.Cursor = Cursors.Hand;
         border.MouseLeftButtonUp += (_, __) =>
         {
+            // ✅ Immer markieren (egal welcher Modus)
+            _selectedEmployeeId = employeeId;
+            _selectedDate = date;
+            _selectedSlotStart = slotStart;
+
+            // Rebuild für saubere Markierung
+            Rebuild();
+
+            // Command feuern
             var cmd = CellClickCommand;
             if (cmd is null) return;
 
@@ -334,7 +326,7 @@ public partial class ScheduleMonthControl : UserControl
     private Brush TryFindBrush(string key)
     {
         if (TryFindResource(key) is Brush b) return b;
-        return new SolidColorBrush(Color.FromRgb(50, 50, 50));
+        return new SolidColorBrush(Color.FromRgb(60, 60, 60));
     }
 
     private static Brush StatusToBrush(AppointmentStatus s)
