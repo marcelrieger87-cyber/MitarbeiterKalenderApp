@@ -33,7 +33,7 @@
                 <!-- Row 1: Inputs + Month Nav -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="520"/>
+                        <ColumnDefinition Width="560"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="320"/>
                     </Grid.ColumnDefinitions>
@@ -46,12 +46,11 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Mitarbeiter -->
                         <Grid Grid.Row="0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="170"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="150"/>
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0"
@@ -73,10 +72,9 @@
                                     Style="{DynamicResource ExcelButtonBlue}"/>
                         </Grid>
 
-                        <!-- Kunde -->
                         <Grid Grid.Row="2">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="170"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
@@ -96,78 +94,82 @@
 
                     <!-- Middle: Year/Month + Nav -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                        <TextBlock Text="Jahr:"
-                                   Foreground="{DynamicResource TextMuted}"
-                                   FontWeight="SemiBold"
-                                   VerticalAlignment="Center"/>
-
+                        <TextBlock Text="Jahr:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding Year, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="90"
-                                 Height="36"
-                                 Margin="10,0,0,0"
+                                 Width="90" Height="36" Margin="10,0,0,0"
                                  Style="{DynamicResource ExcelTextBox}"/>
 
-                        <TextBlock Text="Monat:"
-                                   Foreground="{DynamicResource TextMuted}"
-                                   FontWeight="SemiBold"
-                                   Margin="18,0,0,0"
-                                   VerticalAlignment="Center"/>
-
+                        <TextBlock Text="Monat:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" Margin="18,0,0,0" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding Month, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="70"
-                                 Height="36"
-                                 Margin="10,0,0,0"
+                                 Width="70" Height="36" Margin="10,0,0,0"
                                  Style="{DynamicResource ExcelTextBox}"/>
 
-                        <Button Content="◀"
-                                Command="{Binding PrevMonthCommand}"
-                                Width="52" Height="36"
-                                Margin="16,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
-
-                        <Button Content="▶"
-                                Command="{Binding NextMonthCommand}"
-                                Width="52" Height="36"
-                                Margin="10,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
-
-                        <Button Content="Heute"
-                                Command="{Binding TodayCommand}"
-                                Height="36"
-                                Margin="10,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
+                        <Button Content="◀" Command="{Binding PrevMonthCommand}" Width="52" Height="36" Margin="16,0,0,0" Style="{DynamicResource ExcelButtonGrey}"/>
+                        <Button Content="▶" Command="{Binding NextMonthCommand}" Width="52" Height="36" Margin="10,0,0,0" Style="{DynamicResource ExcelButtonGrey}"/>
+                        <Button Content="Heute" Command="{Binding TodayCommand}" Height="36" Margin="10,0,0,0" Style="{DynamicResource ExcelButtonGrey}"/>
                     </StackPanel>
 
                     <!-- Right: Month Title -->
                     <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding MonthTitle}"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Text}"
-                                   HorizontalAlignment="Right"/>
-                        <TextBlock Text="Monat horizontal scrollen · Mitarbeiter untereinander"
-                                   Foreground="{DynamicResource TextMuted}"
-                                   Margin="0,4,0,0"
-                                   HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding MonthTitle}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Text}" HorizontalAlignment="Right"/>
+                        <TextBlock Text="Monat horizontal scrollen · Mitarbeiter untereinander" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0" HorizontalAlignment="Right"/>
                     </StackPanel>
                 </Grid>
 
-                <!-- Row 2: Buttons full width like Excel -->
+                <!-- Row 2: Buttons exakt wie Excel-Layout -->
                 <Grid Grid.Row="2">
-                    <UniformGrid Rows="2" Columns="5">
-                        <Button Content="Termin verteilen" Command="{Binding AddAppointmentCommand}" Height="44" Margin="0,0,10,10" Style="{DynamicResource ExcelButtonGreen}"/>
-                        <Button Content="Serie erstellen" Command="{Binding DemoCommand}" Height="44" Margin="0,0,10,10" Style="{DynamicResource ExcelButtonPurple}"/>
-                        <Button Content="Termin ändern" Command="{Binding EditCommand}" Height="44" Margin="0,0,10,10" Style="{DynamicResource ExcelButtonOrange}"/>
-                        <Button Content="Termin löschen" Command="{Binding DeleteCommand}" Height="44" Margin="0,0,10,10" Style="{DynamicResource ExcelButtonRed}"/>
-                        <Button Content="SYNC" Command="{Binding SyncCommand}" Height="44" Margin="0,0,0,10" Style="{DynamicResource ExcelButtonBlack}"/>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="420"/>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                        <Button Content="Abwesenheit" Command="{Binding AddAbsenceCommand}" Height="44" Margin="0,0,10,0" Style="{DynamicResource ExcelButtonYellow}"/>
-                        <Button Content="Status ändern" Command="{Binding StatusCommand}" Height="44" Margin="0,0,10,0" Style="{DynamicResource ExcelButtonPink}"/>
-                        <Button Content="MA löschen" Command="{Binding RemoveEmployeeCommand}" Height="44" Margin="0,0,10,0" Style="{DynamicResource ExcelButtonRed}"/>
-                        <!-- frei gelassen für später (z.B. Export/Report) -->
-                        <Button Content="—" IsEnabled="False" Height="44" Margin="0,0,10,0" Style="{DynamicResource ExcelButtonGrey}"/>
-                        <Button Content="—" IsEnabled="False" Height="44" Margin="0,0,0,0" Style="{DynamicResource ExcelButtonGrey}"/>
-                    </UniformGrid>
+                    <!-- LINKS (oben/unten) -->
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Button Grid.Row="0" Content="Termin verteilen" Command="{Binding AddAppointmentCommand}" Height="44" Style="{DynamicResource ExcelButtonGreen}"/>
+                        <Button Grid.Row="2" Content="Serie erstellen" Command="{Binding DemoCommand}" Height="44" Style="{DynamicResource ExcelButtonPurple}"/>
+                    </Grid>
+
+                    <!-- MITTE: Termin ändern / löschen + SYNC -->
+                    <Grid Grid.Column="1" Margin="16,0,16,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Button Grid.Row="0" Content="Termin ändern" Command="{Binding EditCommand}" Height="44" Style="{DynamicResource ExcelButtonOrange}"/>
+                        <Button Grid.Row="2" Content="Termin löschen" Command="{Binding DeleteCommand}" Height="44" Style="{DynamicResource ExcelButtonRed}"/>
+                    </Grid>
+
+                    <Button Grid.Column="1"
+                            Width="140" Height="94"
+                            HorizontalAlignment="Right"
+                            Content="SYNC"
+                            Command="{Binding SyncCommand}"
+                            Style="{DynamicResource ExcelButtonBlack}"/>
+
+                    <!-- RECHTS: Abwesenheit / Status + MA löschen / sortieren -->
+                    <Grid Grid.Column="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="260"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="Abwesenheit" Command="{Binding AddAbsenceCommand}" Height="44" Style="{DynamicResource ExcelButtonYellow}" Margin="0,0,12,0"/>
+                        <Button Grid.Column="1" Content="Status ändern" Command="{Binding StatusCommand}" Height="44" Style="{DynamicResource ExcelButtonPink}" Margin="0,0,12,0"/>
+
+                        <Button Grid.Column="2" Content="MA löschen" Command="{Binding RemoveEmployeeCommand}" Height="44" Style="{DynamicResource ExcelButtonRed}" Margin="0,0,12,0"/>
+                        <Button Grid.Column="3" Content="Mitarbeiter sortieren" Command="{Binding SortEmployeesCommand}" Height="44" Style="{DynamicResource ExcelButtonGrey}"/>
+                    </Grid>
                 </Grid>
 
             </Grid>
