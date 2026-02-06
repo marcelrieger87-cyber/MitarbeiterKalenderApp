@@ -7,9 +7,9 @@
         mc:Ignorable="d"
         Title="Mitarbeiter Kalender"
         Width="1500" Height="850"
-        Background="{DynamicResource AppBackground}">
+        WindowStartupLocation="CenterScreen">
 
-    <Grid Margin="14">
+    <Grid Background="#F2F2F2" Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
@@ -19,8 +19,8 @@
         <!-- HEADER -->
         <Border Grid.Row="0"
                 CornerRadius="14"
-                Background="{DynamicResource Surface}"
-                BorderBrush="{DynamicResource Border}"
+                Background="White"
+                BorderBrush="#DDDDDD"
                 BorderThickness="1"
                 Padding="12">
             <Grid>
@@ -55,22 +55,20 @@
 
                             <TextBlock Grid.Column="0"
                                        Text="Mitarbeitername:"
-                                       Foreground="{DynamicResource TextMuted}"
+                                       Foreground="#666"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
 
-                            <!-- WPF hat KEIN PlaceholderText -> nur normales TextBox -->
+                            <!-- WPF: kein PlaceholderText -->
                             <TextBox Grid.Column="1"
                                      Text="{Binding NewEmployeeName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Height="36"
-                                     Margin="10,0,10,0"
-                                     Style="{DynamicResource ExcelTextBox}"/>
+                                     Margin="10,0,10,0"/>
 
                             <Button Grid.Column="2"
                                     Content="MA anlegen"
                                     Command="{Binding AddEmployeeCommand}"
-                                    Height="36"
-                                    Style="{DynamicResource ExcelButtonBlue}"/>
+                                    Height="36"/>
                         </Grid>
 
                         <Grid Grid.Row="2">
@@ -81,15 +79,14 @@
 
                             <TextBlock Grid.Column="0"
                                        Text="Kundenname:"
-                                       Foreground="{DynamicResource TextMuted}"
+                                       Foreground="#666"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
 
                             <TextBox Grid.Column="1"
                                      Text="{Binding CustomerFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Height="36"
-                                     Margin="10,0,0,0"
-                                     Style="{DynamicResource ExcelTextBox}"/>
+                                     Margin="10,0,0,0"/>
                         </Grid>
                     </Grid>
 
@@ -99,41 +96,36 @@
                                 VerticalAlignment="Center"
                                 HorizontalAlignment="Left">
                         <TextBlock Text="Jahr:"
-                                   Foreground="{DynamicResource TextMuted}"
+                                   Foreground="#666"
                                    FontWeight="SemiBold"
                                    VerticalAlignment="Center"/>
 
                         <TextBox Text="{Binding Year, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="90" Height="36" Margin="10,0,0,0"
-                                 Style="{DynamicResource ExcelTextBox}"/>
+                                 Width="90" Height="36" Margin="10,0,0,0"/>
 
                         <TextBlock Text="Monat:"
-                                   Foreground="{DynamicResource TextMuted}"
+                                   Foreground="#666"
                                    FontWeight="SemiBold"
                                    Margin="18,0,0,0"
                                    VerticalAlignment="Center"/>
 
                         <TextBox Text="{Binding Month, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="70" Height="36" Margin="10,0,0,0"
-                                 Style="{DynamicResource ExcelTextBox}"/>
+                                 Width="70" Height="36" Margin="10,0,0,0"/>
 
                         <Button Content="◀"
                                 Command="{Binding PrevMonthCommand}"
                                 Width="52" Height="36"
-                                Margin="16,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
+                                Margin="16,0,0,0"/>
 
                         <Button Content="▶"
                                 Command="{Binding NextMonthCommand}"
                                 Width="52" Height="36"
-                                Margin="10,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
+                                Margin="10,0,0,0"/>
 
                         <Button Content="Heute"
                                 Command="{Binding TodayCommand}"
                                 Height="36"
-                                Margin="10,0,0,0"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
+                                Margin="10,0,0,0"/>
                     </StackPanel>
 
                     <!-- Right: Month Title -->
@@ -143,10 +135,10 @@
                         <TextBlock Text="{Binding MonthTitle}"
                                    FontSize="18"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Text}"
+                                   Foreground="#222"
                                    HorizontalAlignment="Right"/>
                         <TextBlock Text="Monat horizontal scrollen · Mitarbeiter untereinander"
-                                   Foreground="{DynamicResource TextMuted}"
+                                   Foreground="#777"
                                    Margin="0,4,0,0"
                                    HorizontalAlignment="Right"/>
                     </StackPanel>
@@ -176,26 +168,22 @@
                         <Button Grid.Row="0" Grid.Column="0"
                                 Content="Termin verteilen"
                                 Command="{Binding AddAppointmentCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonGreen}"/>
+                                Height="44"/>
 
                         <Button Grid.Row="0" Grid.Column="2"
                                 Content="Serie erstellen"
-                                Command="{Binding DemoCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonPurple}"/>
+                                Command="{Binding CreateSeriesCommand}"
+                                Height="44"/>
 
                         <Button Grid.Row="2" Grid.Column="0"
                                 Content="Termin ändern"
                                 Command="{Binding EditCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonOrange}"/>
+                                Height="44"/>
 
                         <Button Grid.Row="2" Grid.Column="2"
                                 Content="Termin löschen"
                                 Command="{Binding DeleteCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonRed}"/>
+                                Height="44"/>
                     </Grid>
 
                     <!-- MITTE: SYNC (eigenes Feld, zentriert) -->
@@ -204,8 +192,7 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Content="SYNC"
-                            Command="{Binding SyncCommand}"
-                            Style="{DynamicResource ExcelButtonBlack}"/>
+                            Command="{Binding SyncCommand}"/>
 
                     <!-- RECHTS: 2x2-Block (Abwesenheit/Status/MA) -->
                     <Grid Grid.Column="2">
@@ -213,7 +200,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="10"/>
                             <RowDefinition Height="Auto"/>
-                        </Grid.Row_Definitions>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="12"/>
@@ -223,33 +210,35 @@
                         <Button Grid.Row="0" Grid.Column="0"
                                 Content="Abwesenheit"
                                 Command="{Binding AddAbsenceCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonYellow}"/>
+                                Height="44"/>
 
                         <Button Grid.Row="0" Grid.Column="2"
                                 Content="Status ändern"
                                 Command="{Binding StatusCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonPink}"/>
+                                Height="44"/>
 
                         <Button Grid.Row="2" Grid.Column="0"
                                 Content="MA löschen"
                                 Command="{Binding RemoveEmployeeCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonRed}"/>
+                                Height="44"/>
 
                         <Button Grid.Row="2" Grid.Column="2"
                                 Content="Mitarbeiter sortieren"
                                 Command="{Binding SortEmployeesCommand}"
-                                Height="44"
-                                Style="{DynamicResource ExcelButtonGrey}"/>
+                                Height="44"/>
                     </Grid>
                 </Grid>
             </Grid>
         </Border>
 
         <!-- CALENDAR -->
-        <controls:ScheduleMonthControl Grid.Row="2"
-                                       MonthView="{Binding MonthView}"/>
+        <Border Grid.Row="2"
+                CornerRadius="14"
+                Background="White"
+                BorderBrush="#DDDDDD"
+                BorderThickness="1"
+                Padding="10">
+            <controls:ScheduleMonthControl MonthView="{Binding MonthView}"/>
+        </Border>
     </Grid>
 </Window>
