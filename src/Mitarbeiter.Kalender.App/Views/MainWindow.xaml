@@ -26,50 +26,57 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="340"/>
-                    <ColumnDefinition Width="340"/>
+                    <ColumnDefinition Width="420"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Left: Inputs -->
-                <StackPanel Grid.Column="0" Spacing="8">
+                <StackPanel Grid.Column="0">
                     <TextBlock Text="Mitarbeitername:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold"/>
                     <ComboBox ItemsSource="{Binding Employees}"
                               SelectedItem="{Binding SelectedEmployee}"
                               DisplayMemberPath="DisplayName"
                               Height="34"
+                              Margin="0,6,0,0"
                               Style="{DynamicResource ExcelCombo}"/>
 
-                    <TextBlock Text="Kundenname:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                    <TextBlock Text="Kundenname:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" Margin="0,12,0,0"/>
                     <TextBox Text="{Binding CustomerFilter, UpdateSourceTrigger=PropertyChanged}"
                              Height="34"
+                             Margin="0,6,0,0"
                              Style="{DynamicResource ExcelTextBox}"/>
                 </StackPanel>
 
-                <!-- Middle: Month navigation -->
-                <StackPanel Grid.Column="1" Spacing="10" Margin="16,0,0,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                <!-- Middle: Month navigation + Buttons -->
+                <StackPanel Grid.Column="1" Margin="16,0,0,0">
+
+                    <!-- Month nav row -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Jahr:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding Year}" Width="90" Height="34" Style="{DynamicResource ExcelTextBox}"/>
+                        <TextBox Text="{Binding Year}" Width="90" Height="34" Margin="8,0,0,0" Style="{DynamicResource ExcelTextBox}"/>
 
                         <TextBlock Text="Monat:" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding Month}" Width="70" Height="34" Style="{DynamicResource ExcelTextBox}"/>
+                        <TextBox Text="{Binding Month}" Width="70" Height="34" Margin="8,0,0,0" Style="{DynamicResource ExcelTextBox}"/>
 
                         <Button Content="◀"
                                 Command="{Binding PrevMonthCommand}"
                                 Width="46" Height="34"
+                                Margin="12,0,0,0"
                                 Style="{DynamicResource ExcelButtonGrey}"/>
                         <Button Content="▶"
                                 Command="{Binding NextMonthCommand}"
                                 Width="46" Height="34"
+                                Margin="8,0,0,0"
                                 Style="{DynamicResource ExcelButtonGrey}"/>
                         <Button Content="Heute"
                                 Command="{Binding TodayCommand}"
                                 Height="34"
+                                Margin="8,0,0,0"
                                 Style="{DynamicResource ExcelButtonGrey}"/>
                     </StackPanel>
 
-                    <!-- Excel-like action buttons row -->
-                    <WrapPanel ItemHeight="40" ItemWidth="170" HorizontalAlignment="Left">
+                    <!-- Buttons row -->
+                    <WrapPanel Margin="0,12,0,0">
                         <Button Content="Termin verteilen" Command="{Binding AddAppointmentCommand}" Style="{DynamicResource ExcelButtonGreen}" Margin="0,0,10,10"/>
                         <Button Content="Serie erstellen" Command="{Binding DemoCommand}" Style="{DynamicResource ExcelButtonPurple}" Margin="0,0,10,10"/>
                         <Button Content="Termin ändern" Command="{Binding EditCommand}" Style="{DynamicResource ExcelButtonOrange}" Margin="0,0,10,10"/>
@@ -82,14 +89,15 @@
                     </WrapPanel>
                 </StackPanel>
 
-                <!-- Right: small hint -->
+                <!-- Right: Title -->
                 <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top">
                     <TextBlock Text="{Binding MonthTitle}"
                                FontSize="18"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource Text}"/>
                     <TextBlock Text="Monat horizontal scrollen · Mitarbeiter untereinander"
-                               Foreground="{DynamicResource TextMuted}"/>
+                               Foreground="{DynamicResource TextMuted}"
+                               Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
