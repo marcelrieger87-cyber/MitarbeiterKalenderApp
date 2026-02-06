@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Mitarbeiter.Kalender.App.Core.Models;
 using Mitarbeiter.Kalender.App.Domain.Enums;
+using Mitarbeiter.Kalender.App.ViewModels; // ✅ CalendarCellRef
 
 namespace Mitarbeiter.Kalender.App.Controls;
 
@@ -25,6 +27,20 @@ public partial class ScheduleMonthControl : UserControl
     {
         get => (MonthView?)GetValue(MonthViewProperty);
         set => SetValue(MonthViewProperty, value);
+    }
+
+    // ✅ NEU: Command für Klick in Kalenderzelle
+    public static readonly DependencyProperty CellClickCommandProperty =
+        DependencyProperty.Register(
+            nameof(CellClickCommand),
+            typeof(ICommand),
+            typeof(ScheduleMonthControl),
+            new PropertyMetadata(null));
+
+    public ICommand? CellClickCommand
+    {
+        get => (ICommand?)GetValue(CellClickCommandProperty);
+        set => SetValue(CellClickCommandProperty, value);
     }
 
     private static void OnMonthViewChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -135,10 +151,10 @@ public partial class ScheduleMonthControl : UserControl
                     }
                 }
             };
-            // Grid.Children hinzugefügt in Reihenfolge, Spalten setzen:
             Grid.SetColumn(((Grid)title.Child).Children[0], 0);
             Grid.SetColumn(((Grid)title.Child).Children[1], 1);
             Grid.SetColumn(((Grid)title.Child).Children[2], 2);
+
             Grid.SetRow(title, row);
             Grid.SetColumn(title, 1);
             Grid.SetColumnSpan(title, days.Count);
@@ -149,9 +165,11 @@ public partial class ScheduleMonthControl : UserControl
             // Slot rows
             for (int s = 0; s < slots.Count; s++)
             {
+                var slotStart = slots[s];
+
                 RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(SlotRowHeight) });
 
-                AddCell(row, 0, slots[s].ToString("HH:mm", CultureInfo.InvariantCulture),
+                AddCell(row, 0, slotStart.ToString("HH:mm", CultureInfo.InvariantCulture),
                     isHeader: false,
                     bg: TryFindBrush("SurfaceAlt"),
                     fg: TryFindBrush("Text"),
@@ -162,34 +180,30 @@ public partial class ScheduleMonthControl : UserControl
                 for (int d = 0; d < days.Count; d++)
                 {
                     var date = days[d];
+
                     var cellBg = (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
                         ? TryFindBrush("WeekendFill")
                         : Brushes.Transparent;
 
-                    var cellItems = FindItemsForSlot(mv, emp.Id, date, slots[s], SlotMinutes);
+                    var cellItems = FindItemsForSlot(mv, emp.Id, date, slotStart, SlotMinutes);
+
+                    Border clickableCell;
 
                     if (cellItems.Count == 0)
                     {
-                        AddCell(row, d + 1, "", isHeader: false, bg: cellBg, fg: TryFindBrush("Text"));
+                        clickableCell = MakeClickableCell(emp.Id, date, slotStart, cellBg, null);
                     }
                     else
                     {
                         var first = cellItems[0];
                         var chip = MakeChip(first.Text, first.StatusBrush);
 
-                        var border = new Border
-                        {
-                            Background = cellBg,
-                            BorderBrush = TryFindBrush("GridLine"),
-                            BorderThickness = new Thickness(0.5),
-                            Padding = new Thickness(2, 1, 2, 1),
-                            Child = chip
-                        };
-
-                        Grid.SetRow(border, row);
-                        Grid.SetColumn(border, d + 1);
-                        RootGrid.Children.Add(border);
+                        clickableCell = MakeClickableCell(emp.Id, date, slotStart, cellBg, chip);
                     }
+
+                    Grid.SetRow(clickableCell, row);
+                    Grid.SetColumn(clickableCell, d + 1);
+                    RootGrid.Children.Add(clickableCell);
                 }
 
                 row++;
@@ -199,6 +213,32 @@ public partial class ScheduleMonthControl : UserControl
             RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
             row++;
         }
+    }
+
+    private Border MakeClickableCell(string employeeId, DateOnly date, TimeOnly slotStart, Brush bg, UIElement? content)
+    {
+        var border = new Border
+        {
+            Background = bg,
+            BorderBrush = TryFindBrush("GridLine"),
+            BorderThickness = new Thickness(0.5),
+            Padding = new Thickness(2, 1, 2, 1),
+            Child = content
+        };
+
+        border.Cursor = Cursors.Hand;
+        border.MouseLeftButtonUp += (_, __) =>
+        {
+            var cmd = CellClickCommand;
+            if (cmd is null) return;
+
+            var payload = new CalendarCellRef(employeeId, date, slotStart);
+
+            if (cmd.CanExecute(payload))
+                cmd.Execute(payload);
+        };
+
+        return border;
     }
 
     private sealed record CellItem(string Text, Brush StatusBrush);
