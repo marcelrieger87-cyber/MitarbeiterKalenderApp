@@ -1,4 +1,5 @@
 using System.Globalization;
+using Mitarbeiter.Kalender.App.Domain.Entities;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
