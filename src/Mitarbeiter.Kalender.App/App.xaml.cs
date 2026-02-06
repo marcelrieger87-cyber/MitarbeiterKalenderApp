@@ -5,6 +5,7 @@ using Mitarbeiter.Kalender.App.Core.Abstractions;
 using Mitarbeiter.Kalender.App.Core.Services;
 using Mitarbeiter.Kalender.App.Infrastructure.Sqlite;
 using Mitarbeiter.Kalender.App.ViewModels;
+using Mitarbeiter.Kalender.App.Views;
 
 namespace Mitarbeiter.Kalender.App;
 
@@ -23,17 +24,15 @@ public partial class App : Application
                 services.AddSingleton<ICalendarService, CalendarService>();
 
                 services.AddSingleton<MainViewModel>();
+                services.AddSingleton<MainWindow>();
             })
             .Build();
 
         _host.Start();
 
-        // StartupUri instantiates window; we set DataContext afterwards
-        this.Startup += (_, _) =>
-        {
-            if (Current.MainWindow is not null)
-                Current.MainWindow.DataContext = _host!.Services.GetRequiredService<MainViewModel>();
-        };
+        var window = _host.Services.GetRequiredService<MainWindow>();
+        window.DataContext = _host.Services.GetRequiredService<MainViewModel>();
+        window.Show();
     }
 
     protected override async void OnExit(ExitEventArgs e)
