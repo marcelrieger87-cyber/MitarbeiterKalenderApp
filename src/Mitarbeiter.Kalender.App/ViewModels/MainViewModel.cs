@@ -75,7 +75,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand TodayCommand { get; }
 
     public RelayCommand AddAppointmentCommand { get; }
-    public RelayCommand CreateSeriesCommand { get; } // (für Button-Binding)
+    public RelayCommand CreateSeriesCommand { get; }
     public RelayCommand DemoCommand { get; }
     public RelayCommand EditCommand { get; }
     public RelayCommand DeleteCommand { get; }
@@ -97,7 +97,6 @@ public sealed class MainViewModel : ObservableObject
 
         AddAppointmentCommand = new RelayCommand(() => _ = AddQuickAppointmentAsync());
 
-        // Button existiert im Layout – damit er nicht „tot“ ist:
         CreateSeriesCommand = new RelayCommand(() =>
             MessageBox.Show("Serie: kommt als nächster Schritt (VBA-Logik 1:1)."));
 
@@ -234,32 +233,33 @@ public sealed class MainViewModel : ObservableObject
         var emp = emps.FirstOrDefault(e => e.IsActive) ?? emps[0];
         var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
 
-        // ===== Excel-Logik (VBA): Start + Dauer (Slots) abfragen =====
+        // ===== Excel/VBA: Datum + Startzeit + Dauer(Slots) abfragen =====
         var defaultDate = DateTime.Today.Year == Year && DateTime.Today.Month == Month
             ? new DateOnly(Year, Month, DateTime.Today.Day)
             : new DateOnly(Year, Month, 1);
 
+        // FIX: InputBox ohne named args (C# case-sensitiv)
         var dateInput = Interaction.InputBox(
-            prompt: $"Datum im Monat eingeben (1–{DateTime.DaysInMonth(Year, Month)}):",
-            title: "Termin – Datum",
-            defaultResponse: defaultDate.Day.ToString(CultureInfo.InvariantCulture));
+            $"Datum im Monat eingeben (1–{DateTime.DaysInMonth(Year, Month)}):",
+            "Termin – Datum",
+            defaultDate.Day.ToString(CultureInfo.InvariantCulture));
 
         if (!int.TryParse((dateInput ?? "").Trim(), out var day) ||
             day < 1 || day > DateTime.DaysInMonth(Year, Month))
             return;
 
         var startInput = Interaction.InputBox(
-            prompt: "Startzeit (HH:mm):",
-            title: "Termin – Startzeit",
-            defaultResponse: "09:00");
+            "Startzeit (HH:mm):",
+            "Termin – Startzeit",
+            "09:00");
 
         if (!TryParseTime(startInput, out var start))
             return;
 
         var durInput = Interaction.InputBox(
-            prompt: "Dauer wählen (Slots wie Excel/VBA): 1=0,5h · 2=1h · 3=1,5h · 4=2h",
-            title: "Termin – Dauer",
-            defaultResponse: "2");
+            "Dauer wählen (Slots wie Excel/VBA): 1=0,5h · 2=1h · 3=1,5h · 4=2h",
+            "Termin – Dauer",
+            "2");
 
         if (!int.TryParse((durInput ?? "").Trim(), out var slots) || slots < 1 || slots > 4)
             return;
@@ -309,7 +309,6 @@ public sealed class MainViewModel : ObservableObject
         return false;
     }
 
-    // ✅ FIX: nur EIN Paar Klammern
     private async Task AddQuickAbsenceAsync()
     {
         var emps = (await _repo.GetEmployeesAsync()).ToList();
