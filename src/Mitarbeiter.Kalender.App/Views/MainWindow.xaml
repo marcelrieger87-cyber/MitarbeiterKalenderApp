@@ -154,7 +154,6 @@
 
                 <!-- Row 2: ACTION TILES (alle gleich groß, SYNC exakt mittig) -->
                 <Grid Grid.Row="2">
-                    <!-- feste Breiten: links = rechts gleich -->
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="520"/>
                         <ColumnDefinition Width="160"/>
@@ -230,6 +229,7 @@
 
         <!-- CALENDAR -->
         <controls:ScheduleMonthControl Grid.Row="2"
-                                       MonthView="{Binding MonthView}"/>
+                                       MonthView="{Binding MonthView}"
+                                       CellClickCommand="{Binding CalendarCellClickCommand}"/>
     </Grid>
 </Window>
