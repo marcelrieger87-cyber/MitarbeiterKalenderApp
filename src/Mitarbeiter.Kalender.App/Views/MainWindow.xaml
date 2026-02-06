@@ -77,6 +77,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="170"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="150"/>
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0"
@@ -88,8 +89,14 @@
                             <TextBox Grid.Column="1"
                                      Text="{Binding CustomerFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Height="36"
-                                     Margin="10,0,0,0"
+                                     Margin="10,0,10,0"
                                      Style="{DynamicResource ExcelTextBox}"/>
+
+                            <Button Grid.Column="2"
+                                    Content="MA filtern"
+                                    Command="{Binding FilterEmployeesCommand}"
+                                    Height="36"
+                                    Style="{DynamicResource ExcelButtonGrey}"/>
                         </Grid>
                     </Grid>
 
@@ -152,7 +159,7 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Row 2: ACTION TILES (alle gleich groß, SYNC exakt mittig) -->
+                <!-- Row 2: ACTION TILES -->
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="520"/>
@@ -162,11 +169,26 @@
 
                     <!-- LEFT 2x2 -->
                     <UniformGrid Grid.Column="0" Rows="2" Columns="2">
+                        <!-- ✅ Termin verteilen: leuchtet im Modus -->
                         <Button Content="Termin verteilen"
                                 Height="46"
                                 Margin="0,0,10,10"
-                                Command="{Binding AddAppointmentCommand}"
-                                Style="{DynamicResource ExcelButtonGreen}"/>
+                                Command="{Binding AddAppointmentCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ExcelButtonGreen}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDistributeModeActive}" Value="True">
+                                            <Setter Property="BorderThickness" Value="3"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource HeaderBlue}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsDistributeModeActive}" Value="False">
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
 
                         <Button Content="Serie erstellen"
                                 Height="46"
