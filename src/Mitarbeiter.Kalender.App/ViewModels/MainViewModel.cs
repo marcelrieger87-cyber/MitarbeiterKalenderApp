@@ -188,4 +188,157 @@ public sealed class MainViewModel : ObservableObject
         }
 
         // Simple “Excel-like quick add”: first day, 09:00–10:00
-        var date = new DateOnly(Year
+        var date = new DateOnly(Year, Month, 1);
+        var start = new TimeOnly(9, 0);
+        var end = new TimeOnly(10, 0);
+
+        var kunde = string.IsNullOrWhiteSpace(CustomerFilter) ? "Kunde (Demo)" : CustomerFilter.Trim();
+
+        var appt = new Appointment(
+            Id: Guid.NewGuid().ToString("N"),
+            EmployeeId: SelectedEmployee.Id,
+            Date: date,
+            Start: start,
+            End: end,
+            CustomerName: kunde,
+            Status: AppointmentStatus.Fixed
+        );
+
+        await _service.UpsertAppointmentAsync(appt);
+        await RefreshAsync();
+    }
+
+    private async Task AddQuickAbsenceAsync()
+    {
+        if (SelectedEmployee is null)
+        {
+            MessageBox.Show("Bitte zuerst einen Mitarbeiter auswählen.");
+            return;
+        }
+
+        var date = new DateOnly(Year, Month, Math.Min(2, DateTime.DaysInMonth(Year, Month)));
+
+        var ab = new Absence(
+            Id: Guid.NewGuid().ToString("N"),
+            EmployeeId: SelectedEmployee.Id,
+            Date: date,
+            Type: AbsenceType.Vacation,
+            Note: "Urlaub"
+        );
+
+        await _repo.UpsertAbsenceAsync(ab);
+        await RefreshAsync();
+    }
+
+    private async Task AddEmployeeAsync()
+    {
+        var existing = await _repo.GetEmployeesAsync();
+        var n = existing.Count + 1;
+
+        var emp = new Employee(
+            Id: Guid.NewGuid().ToString("N"),
+            DisplayName: $"MA {n}",
+            IsActive: true
+        );
+
+        var merged = existing.ToList();
+        merged.Add(emp);
+
+        await _repo.SaveEmployeesAsync(merged);
+        SelectedEmployee = emp;
+        await RefreshAsync();
+    }
+
+    private async Task RemoveEmployeeAsync()
+    {
+        if (SelectedEmployee is null)
+        {
+            MessageBox.Show("Kein Mitarbeiter ausgewählt.");
+            return;
+        }
+
+        var emps = (await _repo.GetEmployeesAsync()).ToList();
+        var target = emps.FirstOrDefault(x => x.Id == SelectedEmployee.Id);
+        if (target is null) return;
+
+        emps.Remove(target);
+        await _repo.SaveEmployeesAsync(emps);
+
+        SelectedEmployee = emps.FirstOrDefault();
+        await RefreshAsync();
+    }
+
+    private async Task SeedDemoAsync()
+    {
+        try
+        {
+            var emps = await _repo.GetEmployeesAsync();
+            if (emps.Count == 0)
+            {
+                emps = new List<Employee>
+                {
+                    new(Guid.NewGuid().ToString("N"), "Marcel", true),
+                    new(Guid.NewGuid().ToString("N"), "Heike", true),
+                    new(Guid.NewGuid().ToString("N"), "MA 3", true),
+                };
+                await _repo.SaveEmployeesAsync(emps);
+            }
+
+            // Create a few demo appointments across the month (Excel-like feel)
+            var firstDay = new DateOnly(Year, Month, 1);
+            var daysInMonth = DateTime.DaysInMonth(Year, Month);
+
+            var rand = new Random(42);
+
+            foreach (var emp in emps)
+            {
+                // 6 demo appointments per employee
+                for (int i = 0; i < 6; i++)
+                {
+                    var day = 1 + rand.Next(0, Math.Max(1, daysInMonth - 1));
+                    var date = new DateOnly(Year, Month, day);
+
+                    var startHour = 8 + rand.Next(0, 8); // 08:00..15:00
+                    var start = new TimeOnly(startHour, rand.Next(0, 2) == 0 ? 0 : 30);
+                    var end = start.AddMinutes(60);
+
+                    var status = (AppointmentStatus)(rand.Next(0, 4));
+
+                    var kunde = i % 3 switch
+                    {
+                        0 => "VW AG",
+                        1 => "Kunde Müller",
+                        _ => "Kunde Schmidt"
+                    };
+
+                    var appt = new Appointment(
+                        Id: Guid.NewGuid().ToString("N"),
+                        EmployeeId: emp.Id,
+                        Date: date,
+                        Start: start,
+                        End: end,
+                        CustomerName: kunde,
+                        Status: status
+                    );
+
+                    await _service.UpsertAppointmentAsync(appt);
+                }
+
+                // 1 absence
+                var abDate = firstDay.AddDays(Math.Min(10, daysInMonth - 1));
+                var ab = new Absence(Guid.NewGuid().ToString("N"), emp.Id, abDate, AbsenceType.Training, "Schulung");
+                await _repo.UpsertAbsenceAsync(ab);
+            }
+
+            SelectedEmployee ??= emps.FirstOrDefault();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Demo Fehler:\n" + ex.Message);
+        }
+    }
+
+    private static int ClampMonth(int m) => m < 1 ? 1 : (m > 12 ? 12 : m);
+    private static int ClampYear(int y) => y < 2000 ? 2000 : (y > 2100 ? 2100 : y);
+}
