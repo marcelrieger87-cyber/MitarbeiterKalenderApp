@@ -11,10 +11,8 @@ namespace Mitarbeiter.Kalender.App.Controls;
 
 public partial class ScheduleMonthControl : UserControl
 {
-    // ✅ Markierung (Excel-like)
-    private string? _selectedEmployeeId;
-    private DateOnly? _selectedDate;
-    private TimeOnly? _selectedSlotStart;
+    // Auswahl
+    private string? _selectedAppointmentId;
 
     public ScheduleMonthControl()
     {
@@ -22,10 +20,7 @@ public partial class ScheduleMonthControl : UserControl
     }
 
     public static readonly DependencyProperty MonthViewProperty =
-        DependencyProperty.Register(
-            nameof(MonthView),
-            typeof(MonthView),
-            typeof(ScheduleMonthControl),
+        DependencyProperty.Register(nameof(MonthView), typeof(MonthView), typeof(ScheduleMonthControl),
             new PropertyMetadata(null, OnMonthViewChanged));
 
     public MonthView? MonthView
@@ -34,12 +29,8 @@ public partial class ScheduleMonthControl : UserControl
         set => SetValue(MonthViewProperty, value);
     }
 
-    // ✅ Command für Klick in Kalenderzelle
     public static readonly DependencyProperty CellClickCommandProperty =
-        DependencyProperty.Register(
-            nameof(CellClickCommand),
-            typeof(ICommand),
-            typeof(ScheduleMonthControl),
+        DependencyProperty.Register(nameof(CellClickCommand), typeof(ICommand), typeof(ScheduleMonthControl),
             new PropertyMetadata(null));
 
     public ICommand? CellClickCommand
@@ -50,11 +41,9 @@ public partial class ScheduleMonthControl : UserControl
 
     private static void OnMonthViewChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is ScheduleMonthControl c)
-            c.Rebuild();
+        if (d is ScheduleMonthControl c) c.Rebuild();
     }
 
-    // ===== Excel-like layout constants =====
     private const double TimeColWidth = 70;
     private const double DayColWidth = 85;
     private const double HeaderRowHeight = 28;
@@ -74,30 +63,31 @@ public partial class ScheduleMonthControl : UserControl
         var mv = MonthView;
         if (mv is null) return;
 
+        var holidays = GetHolidaysLowerSaxony(mv.Year);
+
         var days = GetDaysOfMonth(mv.Year, mv.Month);
         var slots = GetSlots(StartTime, EndTime, SlotMinutes);
 
-        // Columns: [Time] + [Day1..DayN]
         RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TimeColWidth) });
         for (int i = 0; i < days.Count; i++)
             RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DayColWidth) });
 
         int row = 0;
 
-        // Header row
+        // Header
         RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(HeaderRowHeight) });
-
         AddCell(row, 0, "Zeit", isHeader: true, bg: TryFindBrush("HeaderBlue"), fg: Brushes.White, fontWeight: FontWeights.SemiBold);
 
         for (int d = 0; d < days.Count; d++)
         {
             var date = days[d];
             var isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isHoliday = holidays.Contains(date);
 
             var headerText = $"{GetGermanShortDow(date.DayOfWeek)}\n{date:dd.MM.}";
             AddCell(row, d + 1, headerText,
                 isHeader: true,
-                bg: isWeekend ? TryFindBrush("WeekendGreen") : TryFindBrush("HeaderBlue"),
+                bg: isHoliday ? TryFindBrush("HolidayGreen") : (isWeekend ? TryFindBrush("WeekendGreen") : TryFindBrush("HeaderBlue")),
                 fg: Brushes.White,
                 fontWeight: FontWeights.SemiBold,
                 textAlign: TextAlignment.Center);
@@ -109,7 +99,6 @@ public partial class ScheduleMonthControl : UserControl
         {
             // Employee title row
             RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(EmployeeTitleHeight) });
-
             AddCell(row, 0, "Mitarbeiter:", isHeader: true, bg: TryFindBrush("HeaderBlue"), fg: Brushes.White, fontWeight: FontWeights.SemiBold);
 
             var title = new Border
@@ -147,7 +136,6 @@ public partial class ScheduleMonthControl : UserControl
             for (int s = 0; s < slots.Count; s++)
             {
                 var slotStart = slots[s];
-
                 RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(SlotRowHeight) });
 
                 AddCell(row, 0, slotStart.ToString("HH:mm", CultureInfo.InvariantCulture),
@@ -161,71 +149,59 @@ public partial class ScheduleMonthControl : UserControl
                 for (int d = 0; d < days.Count; d++)
                 {
                     var date = days[d];
+                    var isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+                    var isHoliday = holidays.Contains(date);
 
-                    var cellBg = (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-                        ? TryFindBrush("WeekendFill")
-                        : Brushes.Transparent;
+                    var cellBg = isHoliday ? TryFindBrush("HolidayFill")
+                        : (isWeekend ? TryFindBrush("WeekendFill") : Brushes.Transparent);
 
-                    var cellItems = FindItemsForSlot(mv, emp.Id, date, slotStart, SlotMinutes);
+                    var apptAtSlot = FindAppointmentAt(mv, emp.Id, date, slotStart);
+                    var isSelectedBlock = apptAtSlot is not null && apptAtSlot.Id == _selectedAppointmentId;
 
-                    Border cell;
                     UIElement? content = null;
+                    if (apptAtSlot is not null)
+                        content = MakeChip(apptAtSlot.CustomerName, StatusToBrush(apptAtSlot.Status));
 
-                    if (cellItems.Count > 0)
-                    {
-                        var first = cellItems[0];
-                        content = MakeChip(first.Text, first.StatusBrush);
-                    }
+                    var border = MakeClickableCell(mv, emp.Id, date, slotStart, cellBg, content, apptAtSlot?.Id, isSelectedBlock);
 
-                    var isSelected =
-                        _selectedEmployeeId == emp.Id &&
-                        _selectedDate == date &&
-                        _selectedSlotStart == slotStart;
-
-                    cell = MakeClickableCell(emp.Id, date, slotStart, cellBg, content, isSelected);
-
-                    Grid.SetRow(cell, row);
-                    Grid.SetColumn(cell, d + 1);
-                    RootGrid.Children.Add(cell);
+                    Grid.SetRow(border, row);
+                    Grid.SetColumn(border, d + 1);
+                    RootGrid.Children.Add(border);
                 }
 
                 row++;
             }
 
-            // Spacer
             RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
             row++;
         }
     }
 
-    private Border MakeClickableCell(string employeeId, DateOnly date, TimeOnly slotStart, Brush bg, UIElement? content, bool isSelected)
+    private Border MakeClickableCell(MonthView mv, string employeeId, DateOnly date, TimeOnly slotStart, Brush bg, UIElement? content, string? apptId, bool isSelectedBlock)
     {
         var border = new Border
         {
             Background = bg,
-            BorderBrush = isSelected ? TryFindBrush("HeaderBlue") : TryFindBrush("GridLine"),
-            BorderThickness = isSelected ? new Thickness(2) : new Thickness(0.5),
+            BorderBrush = isSelectedBlock ? TryFindBrush("HeaderBlue") : TryFindBrush("GridLine"),
+            BorderThickness = isSelectedBlock ? new Thickness(2) : new Thickness(0.5),
             Padding = new Thickness(2, 1, 2, 1),
-            Child = content
+            Child = content,
+            Cursor = Cursors.Hand
         };
 
-        border.Cursor = Cursors.Hand;
         border.MouseLeftButtonUp += (_, __) =>
         {
-            // ✅ Immer markieren (egal welcher Modus)
-            _selectedEmployeeId = employeeId;
-            _selectedDate = date;
-            _selectedSlotStart = slotStart;
+            // ✅ Wenn Termin angeklickt: ganzer Block markiert
+            _selectedAppointmentId = apptId;
 
-            // Rebuild für saubere Markierung
+            // UI neu zeichnen
             Rebuild();
 
-            // Command feuern
+            // ViewModel informieren
             var cmd = CellClickCommand;
             if (cmd is null) return;
 
             var payload = new CalendarCellRef(employeeId, date, slotStart);
-
             if (cmd.CanExecute(payload))
                 cmd.Execute(payload);
         };
@@ -233,33 +209,18 @@ public partial class ScheduleMonthControl : UserControl
         return border;
     }
 
-    private sealed record CellItem(string Text, Brush StatusBrush);
-
-    private List<CellItem> FindItemsForSlot(MonthView mv, string employeeId, DateOnly date, TimeOnly slotStart, int slotMinutes)
+    private Appointment? FindAppointmentAt(MonthView mv, string employeeId, DateOnly date, TimeOnly slotStart)
     {
-        var list = new List<CellItem>();
-        var slotEnd = slotStart.AddMinutes(slotMinutes);
-
         var dayCell = mv.Cells.FirstOrDefault(c => c.Date == date);
-        if (dayCell is null) return list;
+        if (dayCell is null) return null;
 
-        foreach (var a in dayCell.Appointments.Where(a => a.EmployeeId == employeeId))
-        {
-            if (a.End <= slotStart || a.Start >= slotEnd) continue;
-            list.Add(new CellItem(a.CustomerName, StatusToBrush(a.Status)));
-        }
-
-        foreach (var ab in dayCell.Absences.Where(x => x.EmployeeId == employeeId))
-        {
-            list.Add(new CellItem("ABW", TryFindBrush("AbsenceBrush")));
-        }
-
-        return list;
+        return dayCell.Appointments
+            .Where(a => a.EmployeeId == employeeId)
+            .FirstOrDefault(a => a.Start <= slotStart && a.End > slotStart);
     }
 
     private UIElement MakeChip(string text, Brush brush)
-    {
-        return new Border
+        => new Border
         {
             Background = brush,
             CornerRadius = new CornerRadius(6),
@@ -273,7 +234,6 @@ public partial class ScheduleMonthControl : UserControl
                 VerticalAlignment = VerticalAlignment.Center
             }
         };
-    }
 
     private void AddCell(int row, int col, string text, bool isHeader, Brush? bg, Brush? fg,
         FontWeight? fontWeight = null, TextAlignment textAlign = TextAlignment.Left, Thickness? padding = null)
@@ -350,4 +310,47 @@ public partial class ScheduleMonthControl : UserControl
             DayOfWeek.Sunday => "So",
             _ => "?"
         };
+
+    // ✅ Feiertage Niedersachsen (bundesweit + Reformationstag)
+    private static HashSet<DateOnly> GetHolidaysLowerSaxony(int year)
+    {
+        var set = new HashSet<DateOnly>();
+
+        // Fixe Feiertage
+        set.Add(new DateOnly(year, 1, 1));   // Neujahr
+        set.Add(new DateOnly(year, 5, 1));   // Tag der Arbeit
+        set.Add(new DateOnly(year, 10, 3));  // Tag der Deutschen Einheit
+        set.Add(new DateOnly(year, 10, 31)); // Reformationstag (NDS)
+        set.Add(new DateOnly(year, 12, 25)); // 1. Weihnachtstag
+        set.Add(new DateOnly(year, 12, 26)); // 2. Weihnachtstag
+
+        // Bewegliche (Easter-based)
+        var easter = EasterSunday(year);
+        set.Add(easter.AddDays(-2)); // Karfreitag
+        set.Add(easter.AddDays(1));  // Ostermontag
+        set.Add(easter.AddDays(39)); // Christi Himmelfahrt
+        set.Add(easter.AddDays(50)); // Pfingstmontag
+
+        return set;
+    }
+
+    private static DateOnly EasterSunday(int year)
+    {
+        // Anonymous Gregorian algorithm (Meeus/Jones/Butcher)
+        int a = year % 19;
+        int b = year / 100;
+        int c = year % 100;
+        int d = b / 4;
+        int e = b % 4;
+        int f = (b + 8) / 25;
+        int g = (b - f + 1) / 3;
+        int h = (19 * a + b - d - g + 15) % 30;
+        int i = c / 4;
+        int k = c % 4;
+        int l = (32 + 2 * e + 2 * i - h - k) % 7;
+        int m = (a + 11 * h + 22 * l) / 451;
+        int month = (h + l - 7 * m + 114) / 31;
+        int day = ((h + l - 7 * m + 114) % 31) + 1;
+        return new DateOnly(year, month, day);
+    }
 }
