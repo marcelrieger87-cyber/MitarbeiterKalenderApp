@@ -19,62 +19,44 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<Employee> Employees { get; } = new();
 
     private string _newEmployeeName = "";
-    public string NewEmployeeName
-    {
-        get => _newEmployeeName;
-        set => SetProperty(ref _newEmployeeName, value);
-    }
+    public string NewEmployeeName { get => _newEmployeeName; set => SetProperty(ref _newEmployeeName, value); }
 
     private string _customerFilter = "";
-    public string CustomerFilter
-    {
-        get => _customerFilter;
-        set => SetProperty(ref _customerFilter, value);
-    }
+    public string CustomerFilter { get => _customerFilter; set => SetProperty(ref _customerFilter, value); }
 
     private int _year = DateTime.Today.Year;
     public int Year
     {
         get => _year;
-        set
-        {
-            value = ClampYear(value);
-            if (SetProperty(ref _year, value))
-            {
-                Raise(nameof(MonthTitle));
-                _ = RefreshAsync();
-            }
-        }
+        set { value = ClampYear(value); if (SetProperty(ref _year, value)) { Raise(nameof(MonthTitle)); _ = RefreshAsync(); } }
     }
 
     private int _month = DateTime.Today.Month;
     public int Month
     {
         get => _month;
-        set
-        {
-            value = ClampMonth(value);
-            if (SetProperty(ref _month, value))
-            {
-                Raise(nameof(MonthTitle));
-                _ = RefreshAsync();
-            }
-        }
+        set { value = ClampMonth(value); if (SetProperty(ref _month, value)) { Raise(nameof(MonthTitle)); _ = RefreshAsync(); } }
     }
 
-    public string MonthTitle => new DateTime(Year, Month, 1)
-        .ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"));
+    public string MonthTitle => new DateTime(Year, Month, 1).ToString("MMMM yyyy", CultureInfo.GetCultureInfo("de-DE"));
 
     private MonthView? _monthView;
-    public MonthView? MonthView
+    public MonthView? MonthView { get => _monthView; private set => SetProperty(ref _monthView, value); }
+
+    // ✅ Modus-Highlight
+    private bool _isDistributeModeActive;
+    public bool IsDistributeModeActive
     {
-        get => _monthView;
-        private set => SetProperty(ref _monthView, value);
+        get => _isDistributeModeActive;
+        private set => SetProperty(ref _isDistributeModeActive, value);
     }
 
-    // ✅ Aktuell markierte Auswahl (Excel-like)
+    // ✅ Auswahl (markierter Termin)
     private CalendarCellRef? _selectedCell;
     private Appointment? _selectedAppointment;
+
+    // ✅ Mitarbeiter-Filter (Multi)
+    private HashSet<string>? _employeeFilterIds; // null = alle
 
     public RelayCommand PrevMonthCommand { get; }
     public RelayCommand NextMonthCommand { get; }
@@ -91,17 +73,13 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand AddEmployeeCommand { get; }
     public RelayCommand RemoveEmployeeCommand { get; }
     public RelayCommand SortEmployeesCommand { get; }
+    public RelayCommand FilterEmployeesCommand { get; }
 
     public RelayCommand<CalendarCellRef> CalendarCellClickCommand { get; }
 
-    private enum Mode
-    {
-        None,
-        Distribute,              // Termin verteilen: Klick auf leere Zelle => Dauer => erstellen
-        EditMove_WaitTarget      // Termin ändern Zeit: nach Button wartet auf Zielzelle
-    }
-
+    private enum Mode { None, Distribute, Move_WaitTarget }
     private Mode _mode = Mode.None;
+
     private Appointment? _pendingMove;
     private int _pendingMoveSlots;
 
@@ -116,26 +94,26 @@ public sealed class MainViewModel : ObservableObject
         NextMonthCommand = new RelayCommand(NextMonth);
         TodayCommand = new RelayCommand(Today);
 
-        // ✅ Buttons arbeiten auf der markierten Auswahl (wie Excel)
         AddAppointmentCommand = new RelayCommand(StartDistribute);
         CreateSeriesCommand = new RelayCommand(CreateSeriesFromSelection);
         EditCommand = new RelayCommand(EditSelection);
         DeleteCommand = new RelayCommand(DeleteSelection);
 
-        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt (Datenabgleich)."));
-        AddAbsenceCommand = new RelayCommand(() => MessageBox.Show("Abwesenheit: kommt als nächster Schritt (Excel-Logik 1:1)."));
-        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt (Excel-Logik 1:1)."));
+        SyncCommand = new RelayCommand(() => MessageBox.Show("SYNC: kommt als nächster Schritt."));
+        AddAbsenceCommand = new RelayCommand(() => MessageBox.Show("Abwesenheit: kommt als nächster Schritt."));
+        StatusCommand = new RelayCommand(() => MessageBox.Show("Status ändern: kommt als nächster Schritt."));
 
         AddEmployeeCommand = new RelayCommand(() => _ = AddEmployeeAsync());
         RemoveEmployeeCommand = new RelayCommand(() => _ = RemoveLastEmployeeAsync());
         SortEmployeesCommand = new RelayCommand(() => _ = SortEmployeesAsync());
+        FilterEmployeesCommand = new RelayCommand(() => _ = FilterEmployeesAsync());
 
         CalendarCellClickCommand = new RelayCommand<CalendarCellRef>(c => _ = OnCellClickAsync(c));
 
         _ = InitializeAsync();
     }
 
-    // ===== Klick im Kalender =====
+    // ===== Klick =====
 
     private async Task OnCellClickAsync(CalendarCellRef? cell)
     {
@@ -146,22 +124,22 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            // 1) Wenn wir auf Zielzelle warten (Zeit ändern)
-            if (_mode == Mode.EditMove_WaitTarget)
+            if (_mode == Mode.Move_WaitTarget)
             {
                 await ApplyMoveToTargetAsync(cell);
                 return;
             }
 
-            // 2) Termin verteilen Modus: Klick auf LEERE Zelle erzeugt Termin
             if (_mode == Mode.Distribute)
             {
-                await CreateAppointmentAtCellAsync(cell);
+                // Nur leere Zelle erstellt Termin
+                if (_selectedAppointment is null)
+                    await CreateAppointmentAtCellAsync(cell);
+
                 return;
             }
 
-            // 3) Normalmodus: nur markieren (kein Popup-Spam)
-            //    (Damit du erst markierst, dann Button drückst – wie Excel)
+            // Normal: nur markieren (kein PopUp-Spam)
         }
         catch (Exception ex)
         {
@@ -169,7 +147,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    // ===== Termin verteilen =====
+    // ===== Termin verteilen (Modus + Highlight) =====
 
     private void StartDistribute()
     {
@@ -180,86 +158,74 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _mode = Mode.Distribute;
-        _pendingMove = null;
-        // keine MessageBox-Orgie – der Nutzer weiß, was er tut
+        IsDistributeModeActive = true;
     }
 
     private async Task CreateAppointmentAtCellAsync(CalendarCellRef cell)
     {
-        // wenn bereits Termin da: nichts erstellen, nur markieren
-        if (FindAppointmentAt(cell) is not null)
-            return;
-
         var slots = AskDurationSlots();
         if (slots <= 0) return;
-
-        var start = cell.SlotStart;
-        var end = start.AddMinutes(slots * SlotMinutes);
 
         var appt = new Appointment(
             Id: Guid.NewGuid().ToString("N"),
             EmployeeId: cell.EmployeeId,
             Date: cell.Date,
-            Start: start,
-            End: end,
+            Start: cell.SlotStart,
+            End: cell.SlotStart.AddMinutes(slots * SlotMinutes),
             CustomerName: CustomerFilter.Trim(),
-            Status: AppointmentStatus.Fixed);
+            Status: AppointmentStatus.Fixed,
+            IsFromRecurrence: false,
+            RecurrenceRuleId: null);
 
         if (HasOverlap(appt, ignoreAppointmentId: null))
         {
-            MessageBox.Show("Konflikt: Der Termin würde einen anderen Termin überlappen.");
+            MessageBox.Show("Konflikt: Überlappt mit einem anderen Termin.");
             return;
         }
 
         await _service.UpsertAppointmentAsync(appt);
         _mode = Mode.None;
+        IsDistributeModeActive = false;
         await RefreshAsync();
     }
 
-    // ===== Termin löschen =====
-
-    private async void DeleteSelection()
+    // ===== Serie erstellen (endlos via RecurrenceRule) =====
+    // ✅ nur: Jede Woche / Jede zweite Woche
+    // ✅ keine Dauer-Abfrage (kommt vom markierten Termin)
+    private async void CreateSeriesFromSelection()
     {
         try
         {
-            if (_selectedAppointment is null)
+            if (_selectedAppointment is null || _selectedCell is null)
             {
-                MessageBox.Show("Bitte zuerst einen Termin im Kalender anklicken (markieren).");
+                MessageBox.Show("Bitte zuerst einen Termin anklicken (markieren).");
                 return;
             }
 
-            var appt = _selectedAppointment;
+            var interval = AskSeriesWeeklyOrBiWeekly();
+            if (interval == 0) return;
 
-            // ✅ Serien-Erkennung ohne extra DB-Feld:
-            // Serie = gleicher Mitarbeiter + gleicher Kunde + gleiche Startzeit + gleiche Dauer mehrfach im Monat vorhanden
-            var series = FindSeriesCandidates(appt);
-            if (series.Count > 1)
-            {
-                var choice = AskDeleteSingleOrSeries(series.Count);
-                if (choice == 0) return;
+            var source = _selectedAppointment;
 
-                if (choice == 1)
-                {
-                    await _service.DeleteAppointmentAsync(appt.Id);
-                }
-                else
-                {
-                    foreach (var a in series)
-                        await _service.DeleteAppointmentAsync(a.Id);
-                }
-            }
-            else
-            {
-                var ok = MessageBox.Show(
-                    $"Termin löschen?\n\n{appt.CustomerName} ({appt.Start:HH\\:mm}–{appt.End:HH\\:mm})",
-                    "Löschen",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+            // Rule anlegen (endlos; monatliche Anzeige wird expandiert)
+            var ruleId = source.RecurrenceRuleId ?? Guid.NewGuid().ToString("N");
+            var rule = new RecurrenceRule(
+                Id: ruleId,
+                EmployeeId: source.EmployeeId,
+                Weekday: _selectedCell.Date.DayOfWeek,
+                Start: source.Start,
+                End: source.End,
+                CustomerName: source.CustomerName,
+                IsActive: true,
+                IntervalWeeks: interval,
+                AnchorDate: _selectedCell.Date
+            );
 
-                if (ok != MessageBoxResult.Yes) return;
+            await _repo.UpsertRecurrenceRuleAsync(rule);
 
-                await _service.DeleteAppointmentAsync(appt.Id);
-            }
+            // Wenn es ein „normaler“ Einzeltermin war: rausnehmen, weil ab jetzt Serie regelt
+            if (!source.IsFromRecurrence)
+                await _service.DeleteAppointmentAsync(source.Id);
 
             await RefreshAsync();
         }
@@ -269,7 +235,56 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    // ===== Termin ändern =====
+    // ===== Termin löschen (Einzel / Serie) =====
+
+    private async void DeleteSelection()
+    {
+        try
+        {
+            if (_selectedAppointment is null)
+            {
+                MessageBox.Show("Bitte zuerst einen Termin anklicken (markieren).");
+                return;
+            }
+
+            var appt = _selectedAppointment;
+
+            // Serie? -> fragen: nur diesen / ganze Serie
+            if (!string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
+            {
+                var choice = AskSingleOrSeries("Löschen");
+                if (choice == 0) return;
+
+                if (choice == 2)
+                {
+                    await _repo.DeleteRecurrenceRuleAsync(appt.RecurrenceRuleId!);
+                    await RefreshAsync();
+                    return;
+                }
+
+                // Nur diesen: Ausnahme anlegen
+                await CreateCancelExceptionAsync(appt);
+                await RefreshAsync();
+                return;
+            }
+
+            // Einzel
+            var ok = MessageBox.Show(
+                $"Termin löschen?\n\n{appt.CustomerName} ({appt.Start:HH\\:mm}–{appt.End:HH\\:mm})",
+                "Löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+            if (ok != MessageBoxResult.Yes) return;
+
+            await _service.DeleteAppointmentAsync(appt.Id);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Fehler:\n" + ex.Message);
+        }
+    }
+
+    // ===== Termin ändern (Zeit/Dauer; bei Serien: Einzel oder Serie) =====
 
     private async void EditSelection()
     {
@@ -277,27 +292,55 @@ public sealed class MainViewModel : ObservableObject
         {
             if (_selectedAppointment is null || _selectedCell is null)
             {
-                MessageBox.Show("Bitte zuerst einen Termin im Kalender anklicken (markieren).");
+                MessageBox.Show("Bitte zuerst einen Termin anklicken (markieren).");
                 return;
             }
 
-            var choice = AskEditMode(); // 1=Zeit, 2=Dauer, 0=Cancel
-            if (choice == 0) return;
+            var appt = _selectedAppointment;
 
-            if (choice == 2)
+            // Wenn Serie -> vorab fragen: Einzel oder Serie
+            int applyTo = 1; // 1=Einzel, 2=Serie
+            if (!string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
             {
-                // Dauer ändern: sofort Dauer wählen, kein extra Klick nötig
-                var slots = AskDurationSlots(defaultSlots: GetSlots(_selectedAppointment));
+                applyTo = AskSingleOrSeries("Ändern");
+                if (applyTo == 0) return;
+            }
+
+            var edit = AskEditMode(); // 1=Zeit, 2=Dauer, 0=Cancel
+            if (edit == 0) return;
+
+            if (edit == 2)
+            {
+                var slots = AskDurationSlots(defaultSlots: GetSlots(appt));
                 if (slots <= 0) return;
 
-                var updated = _selectedAppointment with
-                {
-                    End = _selectedAppointment.Start.AddMinutes(slots * SlotMinutes)
-                };
+                var newEnd = appt.Start.AddMinutes(slots * SlotMinutes);
 
+                if (applyTo == 2 && !string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
+                {
+                    var rules = await _repo.GetRecurrenceRulesAsync();
+                    var rule = rules.FirstOrDefault(r => r.Id == appt.RecurrenceRuleId);
+                    if (rule is null) return;
+
+                    await _repo.UpsertRecurrenceRuleAsync(rule with { End = newEnd });
+                    await RefreshAsync();
+                    return;
+                }
+
+                // Einzel
+                if (!string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
+                {
+                    // Einzel innerhalb Serie: cancel original + exception mit neuer Dauer (gleiches Datum/Start, anderes End)
+                    await CreateCancelExceptionAsync(appt);
+                    await CreateMoveOrOverrideExceptionAsync(appt, appt.Date, appt.Start, newEnd);
+                    await RefreshAsync();
+                    return;
+                }
+
+                var updated = appt with { End = newEnd };
                 if (HasOverlap(updated, ignoreAppointmentId: updated.Id))
                 {
-                    MessageBox.Show("Konflikt: Die neue Dauer würde einen anderen Termin überlappen.");
+                    MessageBox.Show("Konflikt: Überlappt mit einem anderen Termin.");
                     return;
                 }
 
@@ -306,10 +349,22 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
 
-            // Zeit ändern: wir warten auf Zielzelle (1 Klick)
-            _pendingMove = _selectedAppointment;
-            _pendingMoveSlots = GetSlots(_selectedAppointment);
-            _mode = Mode.EditMove_WaitTarget;
+            // Zeit ändern:
+            if (applyTo == 2 && !string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
+            {
+                // Serie verschieben: wir warten auf Zielzelle, aber ändern danach RULE
+                _pendingMove = appt;
+                _pendingMoveSlots = GetSlots(appt);
+                _mode = Mode.Move_WaitTarget;
+                IsDistributeModeActive = false;
+                return;
+            }
+
+            // Einzel verschieben
+            _pendingMove = appt;
+            _pendingMoveSlots = GetSlots(appt);
+            _mode = Mode.Move_WaitTarget;
+            IsDistributeModeActive = false;
         }
         catch (Exception ex)
         {
@@ -321,88 +376,100 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_pendingMove is null) { _mode = Mode.None; return; }
 
-        var moved = _pendingMove with
+        var appt = _pendingMove;
+        var newStart = target.SlotStart;
+        var newEnd = newStart.AddMinutes(_pendingMoveSlots * SlotMinutes);
+
+        // Serie?
+        if (!string.IsNullOrWhiteSpace(appt.RecurrenceRuleId))
+        {
+            var choice = AskSingleOrSeries("Verschieben");
+            if (choice == 0) { _mode = Mode.None; _pendingMove = null; return; }
+
+            if (choice == 2)
+            {
+                // Ganze Serie: Rule anpassen (Wochentag/Start/End/Mitarbeiter)
+                var rules = await _repo.GetRecurrenceRulesAsync();
+                var rule = rules.FirstOrDefault(r => r.Id == appt.RecurrenceRuleId);
+                if (rule is null) return;
+
+                await _repo.UpsertRecurrenceRuleAsync(rule with
+                {
+                    EmployeeId = target.EmployeeId,
+                    Weekday = target.Date.DayOfWeek,
+                    Start = newStart,
+                    End = newEnd
+                });
+
+                _mode = Mode.None;
+                _pendingMove = null;
+                await RefreshAsync();
+                return;
+            }
+
+            // Nur diesen: cancel original + moved exception (Serie-Zusammenhang bleibt über RuleId)
+            await CreateCancelExceptionAsync(appt);
+            await CreateMoveOrOverrideExceptionAsync(appt, target.Date, newStart, newEnd);
+
+            _mode = Mode.None;
+            _pendingMove = null;
+            await RefreshAsync();
+            return;
+        }
+
+        // Einzeltermin
+        var moved = appt with
         {
             Date = target.Date,
-            Start = target.SlotStart,
-            End = target.SlotStart.AddMinutes(_pendingMoveSlots * SlotMinutes),
+            Start = newStart,
+            End = newEnd,
             EmployeeId = target.EmployeeId
         };
 
         if (HasOverlap(moved, ignoreAppointmentId: moved.Id))
         {
-            MessageBox.Show("Konflikt: Der verschobene Termin würde einen anderen Termin überlappen.");
+            MessageBox.Show("Konflikt: Überlappt mit einem anderen Termin.");
             return;
         }
 
         await _service.UpsertAppointmentAsync(moved);
-        _pendingMove = null;
         _mode = Mode.None;
+        _pendingMove = null;
         await RefreshAsync();
     }
 
-    // ===== Serie erstellen =====
+    // ===== Exceptions (Serie-Zusammenhang bleibt) =====
 
-    private async void CreateSeriesFromSelection()
+    private async Task CreateCancelExceptionAsync(Appointment appt)
     {
-        try
-        {
-            if (_selectedAppointment is null || _selectedCell is null)
-            {
-                MessageBox.Show("Bitte zuerst einen Termin im Kalender anklicken (markieren).");
-                return;
-            }
+        // Cancel = Exception auf originalem Slot -> ExpandWeeklyRule skippt damit
+        var ex = new RecurrenceException(
+            Id: Guid.NewGuid().ToString("N"),
+            RecurrenceRuleId: appt.RecurrenceRuleId!,
+            EmployeeId: appt.EmployeeId,
+            Date: appt.Date,
+            Start: appt.Start,
+            End: appt.End,
+            CustomerName: appt.CustomerName
+        );
 
-            var intervalWeeks = AskSeriesIntervalWeeks();
-            if (intervalWeeks <= 0) return;
+        await _repo.UpsertRecurrenceExceptionAsync(ex);
+    }
 
-            var slots = AskDurationSlots(defaultSlots: GetSlots(_selectedAppointment));
-            if (slots <= 0) return;
+    private async Task CreateMoveOrOverrideExceptionAsync(Appointment appt, DateOnly newDate, TimeOnly newStart, TimeOnly newEnd)
+    {
+        // Moved/Override = zusätzlicher Exception-Termin (wird als Termin angezeigt)
+        var ex = new RecurrenceException(
+            Id: Guid.NewGuid().ToString("N"),
+            RecurrenceRuleId: appt.RecurrenceRuleId!,
+            EmployeeId: appt.EmployeeId,
+            Date: newDate,
+            Start: newStart,
+            End: newEnd,
+            CustomerName: appt.CustomerName
+        );
 
-            var source = _selectedAppointment;
-            var start = source.Start;
-            var end = start.AddMinutes(slots * SlotMinutes);
-
-            var weekday = _selectedCell.Date.DayOfWeek;
-            var anchor = _selectedCell.Date;
-
-            var last = new DateOnly(Year, Month, DateTime.DaysInMonth(Year, Month));
-
-            int created = 0;
-
-            // Excel/VBA-like: gleiche Wochentage, Intervall in Wochen
-            for (var d = anchor; d <= last; d = d.AddDays(1))
-            {
-                if (d.DayOfWeek != weekday) continue;
-
-                var deltaDays = (d.ToDateTime(TimeOnly.MinValue) - anchor.ToDateTime(TimeOnly.MinValue)).Days;
-                var deltaWeeks = deltaDays / 7;
-
-                if (deltaWeeks % intervalWeeks != 0) continue;
-
-                var appt = new Appointment(
-                    Id: Guid.NewGuid().ToString("N"),
-                    EmployeeId: source.EmployeeId,
-                    Date: d,
-                    Start: start,
-                    End: end,
-                    CustomerName: source.CustomerName,
-                    Status: source.Status);
-
-                if (HasOverlap(appt, ignoreAppointmentId: null))
-                    continue;
-
-                await _service.UpsertAppointmentAsync(appt);
-                created++;
-            }
-
-            await RefreshAsync();
-            MessageBox.Show($"Serie erstellt: {created} Termine im Monat.");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show("Fehler:\n" + ex.Message);
-        }
+        await _repo.UpsertRecurrenceExceptionAsync(ex);
     }
 
     // ===== Helpers =====
@@ -432,31 +499,12 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!string.IsNullOrWhiteSpace(ignoreAppointmentId) && a.Id == ignoreAppointmentId)
                 continue;
+
             if (a.End <= candidate.Start || a.Start >= candidate.End) continue;
             return true;
         }
 
         return false;
-    }
-
-    private List<Appointment> FindSeriesCandidates(Appointment seed)
-    {
-        var mv = MonthView;
-        if (mv is null) return new List<Appointment>();
-
-        var durationMinutes = (int)(seed.End.ToTimeSpan() - seed.Start.ToTimeSpan()).TotalMinutes;
-
-        var all = mv.Cells
-            .SelectMany(c => c.Appointments)
-            .Where(a =>
-                a.EmployeeId == seed.EmployeeId &&
-                string.Equals(a.CustomerName, seed.CustomerName, StringComparison.OrdinalIgnoreCase) &&
-                a.Start == seed.Start &&
-                (int)(a.End.ToTimeSpan() - a.Start.ToTimeSpan()).TotalMinutes == durationMinutes)
-            .OrderBy(a => a.Date)
-            .ToList();
-
-        return all;
     }
 
     private static int GetSlots(Appointment a)
@@ -466,7 +514,7 @@ public sealed class MainViewModel : ObservableObject
         return Math.Max(1, (int)Math.Round(mins / (double)SlotMinutes));
     }
 
-    // ===== Dialoge (Buttons statt InputBox) =====
+    // ===== Dialoge =====
 
     private static int AskDurationSlots(int defaultSlots = 2)
     {
@@ -482,27 +530,14 @@ public sealed class MainViewModel : ObservableObject
         };
 
         var root = new StackPanel { Margin = new Thickness(16) };
-        root.Children.Add(new TextBlock
-        {
-            Text = "Wie lange?",
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 0, 12)
-        });
+        root.Children.Add(new TextBlock { Text = "Wie lange?", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 12) });
 
         var grid = new UniformGrid { Columns = 2, Rows = 2 };
         root.Children.Add(grid);
 
         void Add(string label, int slots)
         {
-            var btn = new Button
-            {
-                Content = label,
-                Margin = new Thickness(6),
-                MinWidth = 140,
-                MinHeight = 44,
-                FontWeight = slots == defaultSlots ? FontWeights.SemiBold : FontWeights.Normal
-            };
+            var btn = new Button { Content = label, Margin = new Thickness(6), MinWidth = 140, MinHeight = 44, FontWeight = slots == defaultSlots ? FontWeights.SemiBold : FontWeights.Normal };
             btn.Click += (_, __) => { result = slots; win.Close(); };
             grid.Children.Add(btn);
         }
@@ -537,13 +572,7 @@ public sealed class MainViewModel : ObservableObject
         };
 
         var root = new StackPanel { Margin = new Thickness(16) };
-        root.Children.Add(new TextBlock
-        {
-            Text = "Was möchtest du ändern?",
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 0, 12)
-        });
+        root.Children.Add(new TextBlock { Text = "Was möchtest du ändern?", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 12) });
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
 
@@ -568,13 +597,13 @@ public sealed class MainViewModel : ObservableObject
         return result;
     }
 
-    private static int AskSeriesIntervalWeeks()
+    private static int AskSeriesWeeklyOrBiWeekly()
     {
         int result = 0;
 
         var win = new Window
         {
-            Title = "Serie – Intervall",
+            Title = "Serie",
             SizeToContent = SizeToContent.WidthAndHeight,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
@@ -582,25 +611,19 @@ public sealed class MainViewModel : ObservableObject
         };
 
         var root = new StackPanel { Margin = new Thickness(16) };
-        root.Children.Add(new TextBlock
-        {
-            Text = "Alle wieviel Wochen?",
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 0, 12)
-        });
+        root.Children.Add(new TextBlock { Text = "Wie oft wiederholen?", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 12) });
 
-        var grid = new UniformGrid { Columns = 4, Rows = 1 };
-        root.Children.Add(grid);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
 
-        void Add(int w)
-        {
-            var btn = new Button { Content = w.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(6), MinWidth = 60, MinHeight = 44 };
-            btn.Click += (_, __) => { result = w; win.Close(); };
-            grid.Children.Add(btn);
-        }
+        var b1 = new Button { Content = "Jede Woche", Margin = new Thickness(6), MinWidth = 160, MinHeight = 44 };
+        b1.Click += (_, __) => { result = 1; win.Close(); };
 
-        Add(1); Add(2); Add(3); Add(4);
+        var b2 = new Button { Content = "Jede 2. Woche", Margin = new Thickness(6), MinWidth = 160, MinHeight = 44 };
+        b2.Click += (_, __) => { result = 2; win.Close(); };
+
+        row.Children.Add(b1);
+        row.Children.Add(b2);
+        root.Children.Add(row);
 
         var cancel = new Button { Content = "Abbrechen", Margin = new Thickness(6), MinHeight = 38 };
         cancel.Click += (_, __) => { result = 0; win.Close(); };
@@ -613,13 +636,13 @@ public sealed class MainViewModel : ObservableObject
         return result;
     }
 
-    private static int AskDeleteSingleOrSeries(int count)
+    private static int AskSingleOrSeries(string title)
     {
         int result = 0;
 
         var win = new Window
         {
-            Title = "Löschen",
+            Title = title,
             SizeToContent = SizeToContent.WidthAndHeight,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.NoResize,
@@ -629,7 +652,7 @@ public sealed class MainViewModel : ObservableObject
         var root = new StackPanel { Margin = new Thickness(16) };
         root.Children.Add(new TextBlock
         {
-            Text = $"Es scheint eine Serie zu sein ({count} Termine im Monat).\nWas löschen?",
+            Text = "Nur diesen Termin oder die ganze Serie?",
             FontWeight = FontWeights.SemiBold,
             FontSize = 14,
             Margin = new Thickness(0, 0, 0, 12)
@@ -658,7 +681,76 @@ public sealed class MainViewModel : ObservableObject
         return result;
     }
 
-    // ===== Month / Employees =====
+    // ===== Mitarbeiter Filter =====
+    private async Task FilterEmployeesAsync()
+    {
+        var mv = MonthView;
+        if (mv is null) return;
+
+        var selected = new HashSet<string>(_employeeFilterIds ?? mv.Employees.Where(e => e.IsActive).Select(e => e.Id));
+
+        var win = new Window
+        {
+            Title = "Mitarbeiter filtern",
+            Width = 320,
+            Height = 420,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = Brushes.White,
+            Owner = Application.Current?.MainWindow
+        };
+
+        var root = new DockPanel { Margin = new Thickness(12) };
+
+        var list = new ListBox { BorderThickness = new Thickness(1) };
+        foreach (var e in mv.Employees.Where(e => e.IsActive))
+        {
+            var cb = new CheckBox { Content = e.DisplayName, IsChecked = selected.Contains(e.Id), Margin = new Thickness(4) };
+            cb.Checked += (_, __) => selected.Add(e.Id);
+            cb.Unchecked += (_, __) => selected.Remove(e.Id);
+            list.Items.Add(cb);
+        }
+
+        DockPanel.SetDock(list, Dock.Top);
+        root.Children.Add(list);
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        DockPanel.SetDock(buttons, Dock.Bottom);
+
+        var allBtn = new Button { Content = "Alle", Margin = new Thickness(4), MinWidth = 70 };
+        allBtn.Click += (_, __) =>
+        {
+            selected.Clear();
+            foreach (var e in mv.Employees.Where(e => e.IsActive)) selected.Add(e.Id);
+            for (int i = 0; i < list.Items.Count; i++)
+                ((CheckBox)list.Items[i]).IsChecked = true;
+        };
+
+        var noneBtn = new Button { Content = "Keine", Margin = new Thickness(4), MinWidth = 70 };
+        noneBtn.Click += (_, __) =>
+        {
+            selected.Clear();
+            for (int i = 0; i < list.Items.Count; i++)
+                ((CheckBox)list.Items[i]).IsChecked = false;
+        };
+
+        var okBtn = new Button { Content = "OK", Margin = new Thickness(4), MinWidth = 70 };
+        okBtn.Click += (_, __) => win.Close();
+
+        buttons.Children.Add(allBtn);
+        buttons.Children.Add(noneBtn);
+        buttons.Children.Add(okBtn);
+
+        root.Children.Add(buttons);
+
+        win.Content = root;
+        win.ShowDialog();
+
+        _employeeFilterIds = selected.Count == mv.Employees.Count(e => e.IsActive) ? null : selected;
+        await RefreshAsync();
+    }
+
+    // ===== Init / Refresh =====
 
     private async Task InitializeAsync()
     {
@@ -684,6 +776,13 @@ public sealed class MainViewModel : ObservableObject
     private async Task RefreshAsync()
     {
         MonthView = await _service.BuildMonthViewAsync(Year, Month, employeeIdFilter: null);
+
+        // Multi-Filter nur in der Anzeige
+        if (_employeeFilterIds is not null)
+        {
+            var filtered = MonthView.Employees.Where(e => _employeeFilterIds.Contains(e.Id)).ToList();
+            MonthView = new MonthView(MonthView.Year, MonthView.Month, filtered, MonthView.Cells);
+        }
 
         Employees.Clear();
         foreach (var e in MonthView.Employees)
